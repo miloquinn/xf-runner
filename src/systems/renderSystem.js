@@ -3,6 +3,12 @@ import { assetReady } from "../core/assets.js?v=20260615-1015";
 
 export function createRenderer(dom, assets, state, player) {
   const ctx = dom.ctx;
+  const playerDraw = {
+    uprightW: 148,
+    uprightH: 170,
+    duckW: 178,
+    duckH: 104
+  };
 
   function varColor(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -203,18 +209,20 @@ export function createRenderer(dom, assets, state, player) {
     } else if (!player.onGround) {
       img = assets.runnerJump;
     } else {
-      img = Math.floor(player.runPhase * 1.15) % 2 === 0 ? assets.runnerRun1 : assets.runnerRun2;
+      img = Math.floor(player.runPhase) % 2 === 0 ? assets.runnerRun1 : assets.runnerRun2;
     }
     if (!assetReady(img)) {
       img = player.ducking
         ? assets.runnerDuck
         : !player.onGround
           ? assets.runnerJump
-          : Math.floor(player.runPhase * 1.15) % 2 === 0
+            : Math.floor(player.runPhase) % 2 === 0
             ? assets.runnerRun1
             : assets.runnerRun2;
     }
-    const bob = player.onGround ? Math.sin(player.runPhase) * 3 : 0;
+    const bob = player.onGround ? Math.sin(player.runPhase * Math.PI) * 1.8 : 0;
+    const takeoffLift = state.takeoffAnim > 0 ? -5 * (state.takeoffAnim / 0.09) : 0;
+    const landPress = state.landAnim > 0 ? 3 * (state.landAnim / 0.11) : 0;
 
     ctx.save();
     if (state.invulnerableReason || state.invulnerableGrace > 0) {
@@ -253,10 +261,11 @@ export function createRenderer(dom, assets, state, player) {
     ctx.globalAlpha = 1;
 
     if (assetReady(img)) {
-      const targetH = player.ducking ? 104 : 176;
-      const targetW = targetH * (img.naturalWidth / img.naturalHeight);
-      const left = player.ducking ? player.x - 38 : player.x - 52;
-      const bottom = player.y + (player.ducking ? 11 : 10) + bob;
+      const targetW = player.ducking ? playerDraw.duckW : playerDraw.uprightW;
+      const targetH = player.ducking ? playerDraw.duckH : playerDraw.uprightH;
+      const centerX = player.x + (player.ducking ? 50 : 42);
+      const left = centerX - targetW / 2;
+      const bottom = player.y + (player.ducking ? 11 : 10) + bob + takeoffLift + landPress;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, left, bottom - targetH, targetW, targetH);

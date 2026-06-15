@@ -7,18 +7,18 @@ export const CANVAS = {
 };
 
 export const PHYSICS = {
-  jumpVelocity: -855,
-  jumpHoldGravity: 1450,
-  gravity: 2850,
-  jumpHoldSeconds: 0.17,
-  jumpCutVelocity: -330,
-  jumpBufferSeconds: 0.12,
-  coyoteSeconds: 0.08,
-  takeoffAnimSeconds: 0.11,
-  landAnimSeconds: 0.13,
-  airDuckDropVelocity: 760,
-  airDuckGravity: 6200,
-  airDuckMaxVelocity: 1500,
+  jumpVelocity: -910,
+  jumpHoldGravity: 1320,
+  gravity: 3050,
+  jumpHoldSeconds: 0.18,
+  jumpCutVelocity: -370,
+  jumpBufferSeconds: 0.16,
+  coyoteSeconds: 0.105,
+  takeoffAnimSeconds: 0.09,
+  landAnimSeconds: 0.11,
+  airDuckDropVelocity: 920,
+  airDuckGravity: 7000,
+  airDuckMaxVelocity: 1680,
   jetpackHoverY: CANVAS.groundY - 150,
   jetpackCeilingY: CANVAS.groundY - 185
 };

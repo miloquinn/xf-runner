@@ -486,7 +486,7 @@ export class Game {
     this.state.beltOffset = (this.state.beltOffset + this.state.speed * dt) % 120;
     this.state.nextSpawn -= dt;
     this.state.nextCollectible -= dt;
-    this.player.runPhase += dt * (5.2 + this.state.speed / 155);
+    this.player.runPhase += dt * (3.6 + this.state.speed / 220);
 
     if (this.state.nextSpawn <= 0) {
       spawnObstacle(this.state, cfg, pressure, this.worldWidth);
@@ -570,7 +570,7 @@ export class Game {
   }
 
   loop = (time) => {
-    const dt = Math.min(0.032, (time - this.state.lastTime) / 1000 || 0);
+    const dt = Math.min(0.026, (time - this.state.lastTime) / 1000 || 0);
     this.state.lastTime = time;
     this.update(dt);
     this.draw();
