@@ -22,6 +22,7 @@ export function getDom() {
     playerNameInput: document.getElementById("playerNameInput"),
     leaderboardModal: document.getElementById("leaderboardModal"),
     leaderboardList: document.getElementById("leaderboardList"),
+    leaderboardMoreBtn: document.getElementById("leaderboardMoreBtn"),
     leaderboardInsights: document.getElementById("leaderboardInsights"),
     currentRankSummary: document.getElementById("currentRankSummary"),
     totalGamesNode: document.getElementById("totalGames"),

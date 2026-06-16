@@ -1,4 +1,4 @@
-import { fetchCloudLeaderboard, submitCloudScore } from "../api/leaderboardApi.js?v=20260616-1220";
+import { fetchCloudLeaderboard, submitCloudScore } from "../api/leaderboardApi.js?v=20260616-1235";
 import {
   cleanName,
   escapeHtml,
@@ -7,7 +7,7 @@ import {
   pad,
   saveLeaderboard,
   saveTotalGames
-} from "../core/storage.js?v=20260616-1220";
+} from "../core/storage.js?v=20260616-1235";
 
 export function bestScoresByPlayer(rows, difficulty) {
   const best = new Map();
@@ -32,6 +32,8 @@ export function bestScoresByPlayer(rows, difficulty) {
 
 export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName) {
   const emptyInsights = { regionStats: [], playerGames: [] };
+  let latestInsights = emptyInsights;
+  let insightsExpanded = false;
 
   function updateMeta(totalGames = loadTotalGames(), totalPlayers = state.totalPlayers) {
     const games = Math.max(0, Number(totalGames) || 0);
@@ -55,6 +57,13 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
         games: Math.max(0, Math.floor(Number(row?.games) || 0))
       }))
       .filter((row) => row.label && row.games > 0);
+  }
+
+  function hasInsightRows(insights = emptyInsights) {
+    return (
+      normalizeCountRows(insights.regionStats, "region").length > 0 ||
+      normalizeCountRows(insights.playerGames, "name").length > 0
+    );
   }
 
   function renderRegionStats(rows) {
@@ -123,6 +132,24 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     ].join("");
   }
 
+  function updateMoreButton() {
+    const hasRows = hasInsightRows(latestInsights);
+    dom.leaderboardMoreBtn.hidden = !hasRows;
+    dom.leaderboardMoreBtn.textContent = insightsExpanded ? "收起统计" : "展开更多";
+    dom.leaderboardMoreBtn.setAttribute("aria-expanded", insightsExpanded ? "true" : "false");
+    if (hasRows && insightsExpanded) {
+      renderInsights(latestInsights);
+    } else {
+      dom.leaderboardInsights.hidden = true;
+      dom.leaderboardInsights.innerHTML = "";
+    }
+  }
+
+  function toggleInsights() {
+    insightsExpanded = !insightsExpanded;
+    updateMoreButton();
+  }
+
   function rowHtml(row, rank, current) {
     const suffix = current ? " · 你" : "";
     return `
@@ -136,17 +163,18 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
 
   async function render() {
     dom.leaderboardList.innerHTML = "<p>正在读取排行榜...</p>";
+    dom.leaderboardMoreBtn.hidden = true;
     dom.leaderboardInsights.hidden = true;
     dom.leaderboardInsights.innerHTML = "";
     dom.currentRankSummary.hidden = true;
     dom.currentRankSummary.innerHTML = "";
     updateMeta(loadTotalGames(), state.totalPlayers);
     let rows;
-    let insights = emptyInsights;
+    latestInsights = emptyInsights;
     try {
       const result = await fetchCloudLeaderboard();
       rows = result.scores;
-      insights = {
+      latestInsights = {
         regionStats: result.regionStats,
         playerGames: result.playerGames
       };
@@ -161,7 +189,7 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     rows = bestScoresByPlayer(rows, state.leaderboardDifficulty);
     if (!rows.length) {
       dom.leaderboardList.innerHTML = '<p>这个难度还没有成绩，先跑一局。</p>';
-      renderInsights(insights);
+      updateMoreButton();
       return;
     }
 
@@ -179,7 +207,7 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     const remaining = Math.max(0, rows.length - visibleRows.length);
     html.push(`<div class="leaderboard-summary">本难度共 ${rows.length} 人，显示前 ${visibleRows.length} 名，剩余 ${remaining} 人未显示</div>`);
     dom.leaderboardList.innerHTML = html.join("");
-    renderInsights(insights);
+    updateMoreButton();
   }
 
   async function recordScore(score) {
@@ -213,6 +241,7 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
   }
 
   function open() {
+    insightsExpanded = false;
     state.leaderboardDifficulty = getDifficultyLabel();
     updateTabs();
     dom.leaderboardModal.hidden = false;
@@ -228,6 +257,7 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     updateTabs,
     render,
     recordScore,
+    toggleInsights,
     open,
     close
   };
