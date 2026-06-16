@@ -675,30 +675,31 @@
       .utility {
         position: static;
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 6px;
-        padding: 6px 8px 8px;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 5px;
+        padding: 6px;
         border-top: 3px solid var(--ink);
         background: rgba(255, 255, 247, 0.92);
       }
 
       .utility button {
         width: auto;
-        height: 38px;
-        min-height: 38px;
+        height: 36px;
+        min-height: 36px;
         border-width: 2px;
-        font-size: 18px;
+        font-size: 17px;
         background: #fdfdf6;
         box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.1);
       }
 
       .utility .wide {
         width: auto;
-        font-size: 17px;
+        font-size: 16px;
       }
 
-      #feedbackBtn {
-        font-size: 14px;
+      #feedbackBtn,
+      #shareBtn {
+        font-size: 13px;
       }
 
       .controls {
@@ -849,6 +850,7 @@
         right: 7px;
         bottom: 7px;
         display: flex;
+        flex-wrap: nowrap;
         gap: 5px;
         padding: 0;
         border-top: 0;
@@ -856,7 +858,7 @@
       }
 
       .utility button {
-        width: auto;
+        width: 36px;
         height: 32px;
         min-height: 32px;
         border-width: 2px;
@@ -865,11 +867,13 @@
       }
 
       .utility .wide {
-        width: auto;
+        width: 48px;
         font-size: 13px;
       }
 
-      #feedbackBtn {
+      #feedbackBtn,
+      #shareBtn {
+        width: 48px;
         font-size: 13px;
       }
 
