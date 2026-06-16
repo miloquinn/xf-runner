@@ -1,4 +1,4 @@
-import { REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1350";
+import { REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1405";
 
 export function pad(value) {
   return String(Math.max(0, Math.floor(value))).padStart(5, "0");
@@ -16,7 +16,9 @@ export function escapeHtml(value) {
 
 const contactPatterns = [
   /(?:\+?86[-_\s]*)?1[3-9](?:[-_\s]*\d){9}/,
-  /(^|\D)\d{5,12}($|\D)/,
+  /(^|\D)\d{8,12}($|\D)/,
+  /(?:qq|q号)[-_\s]*(?:\d[-_\s]*){8,12}/i,
+  /(?:vx|wx|v信|微信|威信|薇信)[-_\s]*[a-z0-9_][a-z0-9_\-\s]{4,24}/i,
   /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i,
   /(?:https?:\/\/|www\.|\.com|\.cn|\.net|\.top|\.shop)/i
 ];
@@ -34,12 +36,6 @@ const blockedNameWords = [
   "法轮功",
   "六四",
   "天安门事件",
-  "qq",
-  "q号",
-  "vx",
-  "v信",
-  "wx",
-  "微信",
   "手机号",
   "电话",
   "加我",

@@ -1,4 +1,4 @@
-import { ENTITY_KIND } from "./constants.js?v=20260616-1350";
+import { ENTITY_KIND } from "./constants.js?v=20260616-1405";
 
 export const DIFFICULTIES = {
   easy: {

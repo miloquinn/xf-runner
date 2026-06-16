@@ -135,14 +135,32 @@ CHINA_REGION_ALIASES = {
 IP_REGION_CACHE = {}
 CONTACT_PATTERNS = (
     re.compile(r'(?<!\d)(?:\+?86[-_\s]*)?1[3-9](?:[-_\s]*\d){9}(?!\d)'),
-    re.compile(r'(?<!\d)\d{5,12}(?!\d)'),
+    re.compile(r'(?<!\d)\d{8,12}(?!\d)'),
+    re.compile(r'(?:qq|q号)[-_\s]*(?:\d[-_\s]*){8,12}', re.I),
+    re.compile(r'(?:vx|wx|v信|微信|威信|薇信)[-_\s]*[a-z0-9_][a-z0-9_\-\s]{4,24}', re.I),
     re.compile(r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}', re.I),
     re.compile(r'(?:https?://|www\.|\.com|\.cn|\.net|\.top|\.shop)', re.I),
 )
 CONTACT_KEYWORDS = {
-    'qq', 'q号', 'vx', 'v信', 'wx', '微信', '威信', '薇信',
     '手机号', '电话', '加我', '私聊', '联系我', '群号',
 }
+SENSITIVE_CHAR_FOLD = str.maketrans({
+    '習': '习',
+    '迈': '近',
+    '邁': '近',
+    '进': '近',
+    '進': '近',
+    '劲': '近',
+    '勁': '近',
+    '乎': '平',
+    '苹': '平',
+    '蘋': '平',
+    '评': '平',
+    '評': '平',
+    '萍': '平',
+    '屏': '平',
+    '瓶': '平',
+})
 DEFAULT_NAME_BLOCKLIST = {
     '政治敏感', '敏感政治', '政治内容', '政治口号', '反动',
     '台独', '港独', '疆独', '藏独',
@@ -171,6 +189,10 @@ def normalized_name_text(value):
     return ''.join(ch for ch in text if ch.isalnum() or '\u4e00' <= ch <= '\u9fff')
 
 
+def sensitive_name_skeleton(value):
+    return normalized_name_text(value).translate(SENSITIVE_CHAR_FOLD)
+
+
 def name_blocklist():
     global _NAME_BLOCKLIST_CACHE, _NAME_BLOCKLIST_MTIME
     try:
@@ -181,13 +203,13 @@ def name_blocklist():
     if _NAME_BLOCKLIST_CACHE is not None and _NAME_BLOCKLIST_MTIME == mtime:
         return _NAME_BLOCKLIST_CACHE
 
-    words = {normalized_name_text(word) for word in DEFAULT_NAME_BLOCKLIST}
+    words = {sensitive_name_skeleton(word) for word in DEFAULT_NAME_BLOCKLIST}
     if mtime is not None:
         try:
             for line in NAME_BLOCKLIST_FILE.read_text(encoding='utf-8').splitlines():
                 word = line.split('#', 1)[0].strip()
                 if word:
-                    words.add(normalized_name_text(word))
+                    words.add(sensitive_name_skeleton(word))
         except OSError:
             pass
     _NAME_BLOCKLIST_CACHE = {word for word in words if word}
@@ -198,13 +220,14 @@ def name_blocklist():
 def forbidden_name_reason(value):
     raw = unicodedata.normalize('NFKC', str(value or '')).strip()
     normalized = normalized_name_text(raw)
+    sensitive_text = sensitive_name_skeleton(raw)
     if not raw:
         return 'empty'
     if any(pattern.search(raw) for pattern in CONTACT_PATTERNS):
         return 'contact'
     if any(keyword in normalized for keyword in CONTACT_KEYWORDS):
         return 'contact'
-    if normalized and any(word in normalized for word in name_blocklist()):
+    if sensitive_text and any(word in sensitive_text for word in name_blocklist()):
         return 'sensitive'
     return ''
 
@@ -691,7 +714,7 @@ def ranked_regions(counts, limit=20):
         for region, games in counts.items()
         if clean_count(games) is not None
     ]
-    rows.sort(key=lambda row: (-row['games'], row['region']))
+    rows.sort(key=lambda row: (row['region'] in {UNKNOWN_REGION, UNKNOWN_CHINA_REGION}, -row['games'], row['region']))
     return rows[:limit]
 
 

@@ -1,5 +1,5 @@
-import { PHYSICS } from "../config/constants.js?v=20260616-1350";
-import { EFFECTS } from "../config/powerups.js?v=20260616-1350";
+import { PHYSICS } from "../config/constants.js?v=20260616-1405";
+import { EFFECTS } from "../config/powerups.js?v=20260616-1405";
 
 export function hasEffect(state, type) {
   return Boolean(state.effects[type]?.remaining > 0);
