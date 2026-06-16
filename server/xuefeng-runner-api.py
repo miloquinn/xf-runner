@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 import secrets
+import sys
 import tempfile
 import time
 import fcntl
@@ -32,6 +33,7 @@ SESSION_SCORE_PER_SECOND = int(os.environ.get('XUEFENG_RUNNER_SESSION_SCORE_PER_
 IP_LOOKUP_ENABLED = os.environ.get('XUEFENG_RUNNER_IP_LOOKUP', '1') != '0'
 IP_LOOKUP_TIMEOUT = float(os.environ.get('XUEFENG_RUNNER_IP_LOOKUP_TIMEOUT', '1.2'))
 IP_LOOKUP_CACHE_TTL = int(os.environ.get('XUEFENG_RUNNER_IP_LOOKUP_CACHE_TTL', '86400'))
+MAX_REGION_RETRY_ITEMS = 1000
 UNKNOWN_REGION = '未知'
 UNKNOWN_CHINA_REGION = '未知省份'
 LOCAL_REGION = '本地'
@@ -296,6 +298,14 @@ def normalize_lookup_region(country_code, region, region_code):
     return None
 
 
+def json_get(url, timeout=IP_LOOKUP_TIMEOUT):
+    request = urllib.request.Request(url, headers={'User-Agent': 'xuefeng-runner/1.0'})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        if response.status != 200:
+            return None
+        return json.loads(response.read(4096).decode('utf-8', errors='replace'))
+
+
 def clean_row(row):
     if not isinstance(row, dict):
         return None
@@ -376,6 +386,54 @@ def compact_region_counts(counts, max_items=MAX_META_ITEMS):
     return dict(cleaned[:max_items])
 
 
+def anonymized_lookup_ip(ip):
+    try:
+        address = ipaddress.ip_address(str(ip).strip())
+    except ValueError:
+        return ''
+    if address.is_private or address.is_loopback or address.is_link_local or address.is_multicast or address.is_unspecified:
+        return ''
+    if address.version == 4:
+        network = ipaddress.ip_network(f'{address}/24', strict=False)
+        return str(network.network_address + 1)
+    else:
+        network = ipaddress.ip_network(f'{address}/48', strict=False)
+        return str(network.network_address + 1)
+
+
+def region_retry_key(region, ip):
+    region = clean_region(region)
+    retry_ip = anonymized_lookup_ip(ip)
+    if not retry_ip or region not in {UNKNOWN_REGION, UNKNOWN_CHINA_REGION}:
+        return ''
+    return f'{region}\t{retry_ip}'
+
+
+def compact_region_retry_counts(counts, max_items=MAX_REGION_RETRY_ITEMS):
+    if not isinstance(counts, dict):
+        return {}
+    cleaned = []
+    for key, value in counts.items():
+        if '\t' not in str(key):
+            continue
+        region, ip = str(key).split('\t', 1)
+        retry_key = region_retry_key(region, ip)
+        count = clean_count(value)
+        if retry_key and count is not None:
+            cleaned.append((retry_key, count))
+    cleaned.sort(key=lambda item: (-item[1], item[0]))
+    return dict(cleaned[:max_items])
+
+
+def remember_region_retry(meta, region, ip, count=1):
+    key = region_retry_key(region, ip)
+    clean = clean_count(count)
+    if not key or clean is None:
+        return
+    retry_counts = meta.setdefault('region_retry_ips', {})
+    retry_counts[key] = min(100000000, int(retry_counts.get(key, 0)) + clean)
+
+
 def compact_used_sessions(sessions):
     now = time.time()
     if not isinstance(sessions, dict):
@@ -410,10 +468,16 @@ def load_meta_unlocked(rows):
         if isinstance(meta.get('region_stats'), dict)
         else {}
     )
+    region_retry_ips = (
+        compact_region_retry_counts(meta.get('region_retry_ips', {}))
+        if isinstance(meta.get('region_retry_ips'), dict)
+        else {}
+    )
     return {
         'total_games': max(total, len(rows)),
         'player_games': compact_counts(player_games),
         'region_stats': compact_region_counts(region_stats),
+        'region_retry_ips': compact_region_retry_counts(region_retry_ips),
         'used_sessions': compact_used_sessions(meta.get('used_sessions', {})),
     }
 
@@ -423,6 +487,7 @@ def save_meta_unlocked(meta):
         'total_games': max(0, int(meta.get('total_games', 0))),
         'player_games': compact_counts(meta.get('player_games', {})),
         'region_stats': compact_region_counts(meta.get('region_stats', {})),
+        'region_retry_ips': compact_region_retry_counts(meta.get('region_retry_ips', {})),
         'used_sessions': compact_used_sessions(meta.get('used_sessions', {})),
     }
     write_json_atomic(META_FILE, payload, prefix='meta-')
@@ -487,42 +552,64 @@ def lookup_region_by_ip(ip):
     cached = IP_REGION_CACHE.get(ip)
     if cached and cached[1] > now:
         return cached[0]
-    url = f'https://ipapi.co/{urllib.parse.quote(ip, safe="")}/json/'
-    request = urllib.request.Request(url, headers={'User-Agent': 'xuefeng-runner/1.0'})
-    try:
-        with urllib.request.urlopen(request, timeout=IP_LOOKUP_TIMEOUT) as response:
-            if response.status != 200:
-                return None
-            payload = json.loads(response.read(4096).decode('utf-8', errors='replace'))
-    except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-        return None
-    region = normalize_lookup_region(
-        payload.get('country_code') or payload.get('country'),
-        payload.get('region') or payload.get('region_name'),
-        payload.get('region_code'),
+    region = None
+    escaped_ip = urllib.parse.quote(ip, safe='')
+    lookups = (
+        (
+            f'https://ipapi.co/{escaped_ip}/json/',
+            lambda payload: normalize_lookup_region(
+                payload.get('country_code') or payload.get('country'),
+                payload.get('region') or payload.get('region_name'),
+                payload.get('region_code'),
+            ),
+        ),
+        (
+            f'http://ip-api.com/json/{escaped_ip}?fields=status,countryCode,region,regionName,country&lang=zh-CN',
+            lambda payload: normalize_lookup_region(
+                payload.get('countryCode'),
+                payload.get('regionName') or payload.get('region'),
+                payload.get('region'),
+            ) if payload.get('status') == 'success' else None,
+        ),
     )
+    for url, parser in lookups:
+        try:
+            payload = json_get(url)
+        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        region = parser(payload)
+        if region and region not in {UNKNOWN_REGION, UNKNOWN_CHINA_REGION}:
+            break
     if region:
         IP_REGION_CACHE[ip] = (region, now + IP_LOOKUP_CACHE_TTL)
     return region
 
 
-def client_region(headers, client_address):
+def client_region_detail(headers, client_address):
     country = (headers.get('CF-IPCountry') or '').strip().upper()
     region = headers.get('CF-Region') or headers.get('CF-IPRegion') or ''
     region_code = headers.get('CF-Region-Code') or headers.get('CF-IPRegion-Code') or ''
     if country == 'CN':
         header_region = normalize_china_region(region, region_code)
         if header_region:
-            return header_region
-        return lookup_region_by_ip(client_ip(headers, client_address)) or UNKNOWN_CHINA_REGION
+            return header_region, ''
+        ip = client_ip(headers, client_address)
+        return lookup_region_by_ip(ip) or UNKNOWN_CHINA_REGION, ip
     if country and country not in {'XX', 'T1'}:
-        return COUNTRY_NAMES.get(country, country)
+        return COUNTRY_NAMES.get(country, country), ''
     ip = client_ip(headers, client_address)
     if ip:
-        return lookup_region_by_ip(ip) or UNKNOWN_REGION
+        return lookup_region_by_ip(ip) or UNKNOWN_REGION, ip
     if client_address and str(client_address[0] or '').startswith('127.'):
-        return LOCAL_REGION
-    return UNKNOWN_REGION
+        return LOCAL_REGION, ''
+    return UNKNOWN_REGION, ''
+
+
+def client_region(headers, client_address):
+    region, _ = client_region_detail(headers, client_address)
+    return region
 
 
 def ranked_counts(counts, limit=100):
@@ -646,8 +733,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             meta['total_games'] += 1
             meta['player_games'][entry['name']] = meta['player_games'].get(entry['name'], 0) + 1
-            region = client_region(self.headers, self.client_address)
+            region, retry_ip = client_region_detail(self.headers, self.client_address)
             meta['region_stats'][region] = meta['region_stats'].get(region, 0) + 1
+            remember_region_retry(meta, region, retry_ip)
             rows.append(entry)
             rows = best_scores(rows)
             save_scores_unlocked(rows)
@@ -656,7 +744,43 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(200, {'ok': True, **leaderboard_payload(rows, meta)})
 
 
+def reparse_region_retries():
+    ensure_store()
+    moved = {}
+    unresolved = {}
+    with LOCK_FILE.open('r+') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        rows = load_scores_unlocked()
+        meta = load_meta_unlocked(rows)
+        retry_counts = compact_region_retry_counts(meta.get('region_retry_ips', {}))
+        for key, count in retry_counts.items():
+            from_region, ip = key.split('\t', 1)
+            region = lookup_region_by_ip(ip)
+            if region and region not in {UNKNOWN_REGION, UNKNOWN_CHINA_REGION}:
+                current_unknown = int(meta['region_stats'].get(from_region, 0))
+                move_count = min(current_unknown, count)
+                if move_count > 0:
+                    meta['region_stats'][from_region] = current_unknown - move_count
+                    if meta['region_stats'][from_region] <= 0:
+                        meta['region_stats'].pop(from_region, None)
+                    meta['region_stats'][region] = meta['region_stats'].get(region, 0) + move_count
+                    moved[region] = moved.get(region, 0) + move_count
+                continue
+            unresolved[key] = count
+        meta['region_retry_ips'] = unresolved
+        save_meta_unlocked(meta)
+        fcntl.flock(lock, fcntl.LOCK_UN)
+    return {
+        'moved': moved,
+        'unresolved': sum(unresolved.values()),
+        'retry_items': len(unresolved),
+    }
+
+
 if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--reparse-regions':
+        print(json.dumps(reparse_region_retries(), ensure_ascii=False, sort_keys=True))
+        raise SystemExit(0)
     ensure_store()
     server = ThreadingHTTPServer(('127.0.0.1', 8787), Handler)
     server.serve_forever()
