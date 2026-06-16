@@ -1,7 +1,7 @@
-import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1320";
-import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1320";
-import { EFFECTS } from "../config/powerups.js?v=20260616-1320";
-import { loadAssets } from "./assets.js?v=20260616-1320";
+import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1350";
+import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1350";
+import { EFFECTS } from "../config/powerups.js?v=20260616-1350";
+import { loadAssets } from "./assets.js?v=20260616-1350";
 import {
   createAudioController,
   pauseBackgroundMusic,
@@ -9,7 +9,7 @@ import {
   playGameOverSound,
   setSoundEnabled,
   unlockAudio
-} from "./audio.js?v=20260616-1320";
+} from "./audio.js?v=20260616-1350";
 import {
   cleanName,
   advanceReviveProgress,
@@ -20,24 +20,24 @@ import {
   saveHiScore,
   savePlayerName,
   saveReviveState
-} from "./storage.js?v=20260616-1320";
-import { isTypingTarget } from "../ui/dom.js?v=20260616-1320";
-import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1320";
+} from "./storage.js?v=20260616-1350";
+import { isTypingTarget } from "../ui/dom.js?v=20260616-1350";
+import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1350";
 import {
   activateEffect,
   hasEffect,
   isInvulnerable,
   updateEffects,
   updateLandingInvulnerability
-} from "../systems/effectSystem.js?v=20260616-1320";
-import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1320";
-import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1320";
+} from "../systems/effectSystem.js?v=20260616-1350";
+import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1350";
+import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1350";
 import {
   nextCollectibleDelay,
   spawnCollectible,
   spawnObstacle
-} from "../systems/spawnSystem.js?v=20260616-1320";
-import { createRenderer } from "../systems/renderSystem.js?v=20260616-1320";
+} from "../systems/spawnSystem.js?v=20260616-1350";
+import { createRenderer } from "../systems/renderSystem.js?v=20260616-1350";
 
 export class Game {
   constructor(dom) {
@@ -204,6 +204,7 @@ export class Game {
   closeEntryModal() {
     const name = cleanName(this.dom.playerNameInput.value);
     if (!name) {
+      this.showMessage("换个名字", "名字不能包含联系方式或敏感内容。");
       this.dom.playerNameInput.focus();
       return false;
     }

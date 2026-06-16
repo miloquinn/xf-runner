@@ -6,10 +6,12 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sys
 import tempfile
 import time
+import unicodedata
 import fcntl
 import ipaddress
 import urllib.error
@@ -21,6 +23,7 @@ DATA_FILE = DATA_DIR / 'scores.json'
 META_FILE = DATA_DIR / 'meta.json'
 LOCK_FILE = DATA_DIR / 'scores.lock'
 SECRET_FILE = DATA_DIR / 'api-secret.key'
+NAME_BLOCKLIST_FILE = Path(os.environ.get('XUEFENG_RUNNER_NAME_BLOCKLIST', DATA_DIR / 'name-blocklist.txt'))
 MAX_BODY = 4096
 MAX_SCORE = int(os.environ.get('XUEFENG_RUNNER_MAX_SCORE', '180000'))
 MAX_NAME_LENGTH = 12
@@ -130,6 +133,23 @@ CHINA_REGION_ALIASES = {
     'zhejiang': '浙江',
 }
 IP_REGION_CACHE = {}
+CONTACT_PATTERNS = (
+    re.compile(r'(?<!\d)(?:\+?86[-_\s]*)?1[3-9](?:[-_\s]*\d){9}(?!\d)'),
+    re.compile(r'(?<!\d)\d{5,12}(?!\d)'),
+    re.compile(r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}', re.I),
+    re.compile(r'(?:https?://|www\.|\.com|\.cn|\.net|\.top|\.shop)', re.I),
+)
+CONTACT_KEYWORDS = {
+    'qq', 'q号', 'vx', 'v信', 'wx', '微信', '威信', '薇信',
+    '手机号', '电话', '加我', '私聊', '联系我', '群号',
+}
+DEFAULT_NAME_BLOCKLIST = {
+    '政治敏感', '敏感政治', '政治内容', '政治口号', '反动',
+    '台独', '港独', '疆独', '藏独',
+    '法轮功', '六四', '天安门事件',
+}
+_NAME_BLOCKLIST_CACHE = None
+_NAME_BLOCKLIST_MTIME = None
 
 
 def ensure_store():
@@ -146,10 +166,53 @@ def ensure_store():
             pass
 
 
+def normalized_name_text(value):
+    text = unicodedata.normalize('NFKC', str(value or '')).lower()
+    return ''.join(ch for ch in text if ch.isalnum() or '\u4e00' <= ch <= '\u9fff')
+
+
+def name_blocklist():
+    global _NAME_BLOCKLIST_CACHE, _NAME_BLOCKLIST_MTIME
+    try:
+        stat = NAME_BLOCKLIST_FILE.stat()
+        mtime = stat.st_mtime
+    except OSError:
+        mtime = None
+    if _NAME_BLOCKLIST_CACHE is not None and _NAME_BLOCKLIST_MTIME == mtime:
+        return _NAME_BLOCKLIST_CACHE
+
+    words = {normalized_name_text(word) for word in DEFAULT_NAME_BLOCKLIST}
+    if mtime is not None:
+        try:
+            for line in NAME_BLOCKLIST_FILE.read_text(encoding='utf-8').splitlines():
+                word = line.split('#', 1)[0].strip()
+                if word:
+                    words.add(normalized_name_text(word))
+        except OSError:
+            pass
+    _NAME_BLOCKLIST_CACHE = {word for word in words if word}
+    _NAME_BLOCKLIST_MTIME = mtime
+    return _NAME_BLOCKLIST_CACHE
+
+
+def forbidden_name_reason(value):
+    raw = unicodedata.normalize('NFKC', str(value or '')).strip()
+    normalized = normalized_name_text(raw)
+    if not raw:
+        return 'empty'
+    if any(pattern.search(raw) for pattern in CONTACT_PATTERNS):
+        return 'contact'
+    if any(keyword in normalized for keyword in CONTACT_KEYWORDS):
+        return 'contact'
+    if normalized and any(word in normalized for word in name_blocklist()):
+        return 'sensitive'
+    return ''
+
+
 def clean_name(value):
-    value = str(value or '').strip()
-    value = ' '.join(value.split())[:MAX_NAME_LENGTH]
-    if not value or value.startswith('__'):
+    raw = str(value or '').strip()
+    value = ' '.join(raw.split())[:MAX_NAME_LENGTH]
+    if not value or value.startswith('__') or forbidden_name_reason(raw) or forbidden_name_reason(value):
         return None
     return value
 
@@ -367,7 +430,7 @@ def compact_counts(counts, max_items=MAX_META_ITEMS):
         count = clean_count(value)
         if count is None:
             continue
-        label = clean_name(key) or clean_region(key)
+        label = clean_name(key)
         if label:
             cleaned.append((label, count))
     cleaned.sort(key=lambda item: (-item[1], item[0]))

@@ -1,4 +1,4 @@
-import { createCloudSession, fetchCloudLeaderboard, submitCloudScore } from "../api/leaderboardApi.js?v=20260616-1320";
+import { createCloudSession, fetchCloudLeaderboard, submitCloudScore } from "../api/leaderboardApi.js?v=20260616-1350";
 import {
   cleanName,
   escapeHtml,
@@ -7,7 +7,7 @@ import {
   pad,
   saveLeaderboard,
   saveTotalGames
-} from "../core/storage.js?v=20260616-1320";
+} from "../core/storage.js?v=20260616-1350";
 
 export function bestScoresByPlayer(rows, difficulty) {
   const best = new Map();

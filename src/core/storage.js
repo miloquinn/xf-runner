@@ -1,4 +1,4 @@
-import { REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1320";
+import { REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1350";
 
 export function pad(value) {
   return String(Math.max(0, Math.floor(value))).padStart(5, "0");
@@ -14,8 +14,63 @@ export function escapeHtml(value) {
   })[ch]);
 }
 
+const contactPatterns = [
+  /(?:\+?86[-_\s]*)?1[3-9](?:[-_\s]*\d){9}/,
+  /(^|\D)\d{5,12}($|\D)/,
+  /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i,
+  /(?:https?:\/\/|www\.|\.com|\.cn|\.net|\.top|\.shop)/i
+];
+
+const blockedNameWords = [
+  "政治敏感",
+  "敏感政治",
+  "政治内容",
+  "政治口号",
+  "反动",
+  "台独",
+  "港独",
+  "疆独",
+  "藏独",
+  "法轮功",
+  "六四",
+  "天安门事件",
+  "qq",
+  "q号",
+  "vx",
+  "v信",
+  "wx",
+  "微信",
+  "手机号",
+  "电话",
+  "加我",
+  "私聊",
+  "联系我",
+  "群号"
+];
+
+function normalizeNameText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^0-9a-z\u4e00-\u9fff]/g, "");
+}
+
+export function isAllowedPlayerName(value) {
+  const raw = String(value || "").trim().normalize("NFKC");
+  const normalized = normalizeNameText(raw);
+  if (!raw || raw.startsWith("__")) {
+    return false;
+  }
+  if (contactPatterns.some((pattern) => pattern.test(raw))) {
+    return false;
+  }
+  return !blockedNameWords.some((word) => normalized.includes(normalizeNameText(word)));
+}
+
 export function cleanName(value) {
-  return String(value || "").trim().replace(/\s+/g, " ").slice(0, 12);
+  const raw = String(value || "").trim();
+  const name = raw.replace(/\s+/g, " ").slice(0, 12);
+  return isAllowedPlayerName(raw) && isAllowedPlayerName(name) ? name : "";
 }
 
 export function getCookie(name) {

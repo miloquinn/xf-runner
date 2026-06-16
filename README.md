@@ -79,7 +79,7 @@ http://127.0.0.1:4173/
 - `GET /api/session?difficulty=简单`
 - `POST /api/score`
 
-线上后端脚本位于 `/usr/local/bin/xuefeng-runner-api.py`，仓库副本在 `server/xuefeng-runner-api.py`。后端会拒绝非法难度、空名字、`__` 开头的探测名、非整数分数和明显不可能的超高分。提交成绩前必须先领取服务端签名的一次性开局令牌；服务端会按令牌签发时间校验真实耗时和分数上限，避免直接 POST 假成绩。地区统计按服务端收到的网络地区聚合，不在 API 响应或 Git 仓库中保存明文 IP。后端会优先使用 Cloudflare 省/地区请求头；缺失时读取 `CF-Connecting-IP` / `X-Forwarded-For` 中的真实公网 IP，并通过 `ipapi.co` 和 `ip-api.com` 查询省/地区，带超时和内存缓存。查询失败的未知地区只保存匿名化网段，后续可在服务器执行 `sudo -u www-data XUEFENG_RUNNER_DATA_DIR=/var/lib/xuefeng-runner python3 /usr/local/bin/xuefeng-runner-api.py --reparse-regions` 重试解析。
+线上后端脚本位于 `/usr/local/bin/xuefeng-runner-api.py`，仓库副本在 `server/xuefeng-runner-api.py`。后端会拒绝非法难度、空名字、`__` 开头的探测名、非整数分数、明显不可能的超高分，以及包含联系方式或敏感内容的名字；服务器私有补充词表放在 `/var/lib/xuefeng-runner/name-blocklist.txt`，不要提交到 Git。提交成绩前必须先领取服务端签名的一次性开局令牌；服务端会按令牌签发时间校验真实耗时和分数上限，避免直接 POST 假成绩。地区统计按服务端收到的网络地区聚合，不在 API 响应或 Git 仓库中保存明文 IP。后端会优先使用 Cloudflare 省/地区请求头；缺失时读取 `CF-Connecting-IP` / `X-Forwarded-For` 中的真实公网 IP，并通过 `ipapi.co` 和 `ip-api.com` 查询省/地区，带超时和内存缓存。查询失败的未知地区只保存匿名化网段，后续可在服务器执行 `sudo -u www-data XUEFENG_RUNNER_DATA_DIR=/var/lib/xuefeng-runner python3 /usr/local/bin/xuefeng-runner-api.py --reparse-regions` 重试解析。
 
 `GET /api/leaderboard` 返回示例：
 
