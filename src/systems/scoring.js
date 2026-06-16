@@ -1,4 +1,4 @@
-import { EFFECTS } from "../config/powerups.js?v=20260616-1405";
+import { EFFECTS } from "../config/powerups.js?v=20260616-1420";
 
 export function scorePressure(state, difficulty) {
   const scoreCurve = Math.sqrt(Math.max(0, state.baseScore) / 1800) * difficulty.scoreScale;

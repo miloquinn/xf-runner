@@ -1,7 +1,7 @@
-import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1405";
-import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1405";
-import { EFFECTS } from "../config/powerups.js?v=20260616-1405";
-import { loadAssets } from "./assets.js?v=20260616-1405";
+import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1420";
+import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1420";
+import { EFFECTS } from "../config/powerups.js?v=20260616-1420";
+import { loadAssets } from "./assets.js?v=20260616-1420";
 import {
   createAudioController,
   pauseBackgroundMusic,
@@ -9,7 +9,7 @@ import {
   playGameOverSound,
   setSoundEnabled,
   unlockAudio
-} from "./audio.js?v=20260616-1405";
+} from "./audio.js?v=20260616-1420";
 import {
   cleanName,
   advanceReviveProgress,
@@ -20,24 +20,25 @@ import {
   saveHiScore,
   savePlayerName,
   saveReviveState
-} from "./storage.js?v=20260616-1405";
-import { isTypingTarget } from "../ui/dom.js?v=20260616-1405";
-import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1405";
+} from "./storage.js?v=20260616-1420";
+import { isTypingTarget } from "../ui/dom.js?v=20260616-1420";
+import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1420";
+import { validateCloudName } from "../api/leaderboardApi.js?v=20260616-1420";
 import {
   activateEffect,
   hasEffect,
   isInvulnerable,
   updateEffects,
   updateLandingInvulnerability
-} from "../systems/effectSystem.js?v=20260616-1405";
-import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1405";
-import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1405";
+} from "../systems/effectSystem.js?v=20260616-1420";
+import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1420";
+import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1420";
 import {
   nextCollectibleDelay,
   spawnCollectible,
   spawnObstacle
-} from "../systems/spawnSystem.js?v=20260616-1405";
-import { createRenderer } from "../systems/renderSystem.js?v=20260616-1405";
+} from "../systems/spawnSystem.js?v=20260616-1420";
+import { createRenderer } from "../systems/renderSystem.js?v=20260616-1420";
 
 export class Game {
   constructor(dom) {
@@ -94,7 +95,8 @@ export class Game {
       invulnerableGrace: 0,
       revive,
       revivesUsedThisRun: 0,
-      finalizedRun: false
+      finalizedRun: false,
+      entryChecking: false
     };
   }
 
@@ -201,14 +203,34 @@ export class Game {
     setTimeout(() => this.dom.playerNameInput.focus(), 50);
   }
 
-  closeEntryModal() {
+  async confirmEntryModal() {
+    if (this.state.entryChecking) {
+      return false;
+    }
     const name = cleanName(this.dom.playerNameInput.value);
     if (!name) {
       this.showMessage("换个名字", "名字不能包含联系方式或敏感内容。");
       this.dom.playerNameInput.focus();
       return false;
     }
-    this.state.playerName = savePlayerName(name);
+    this.state.entryChecking = true;
+    this.dom.entryStartBtn.disabled = true;
+    try {
+      const result = await validateCloudName(name);
+      if (!result.ok || !result.name) {
+        this.showMessage("名字不可用", "这个名字不能使用，请换一个。");
+        this.dom.playerNameInput.focus();
+        return false;
+      }
+      this.state.playerName = savePlayerName(result.name);
+    } catch {
+      this.showMessage("校验失败", "暂时无法确认这个名字，请稍后再试。");
+      this.dom.playerNameInput.focus();
+      return false;
+    } finally {
+      this.state.entryChecking = false;
+      this.dom.entryStartBtn.disabled = false;
+    }
     this.dom.playerNameInput.value = this.state.playerName;
     this.state.hasEntered = true;
     this.dom.entryModal.hidden = true;
@@ -216,7 +238,8 @@ export class Game {
   }
 
   resetGame() {
-    if (!this.state.hasEntered && !this.closeEntryModal()) {
+    if (!this.state.hasEntered) {
+      this.openEntryModal();
       return;
     }
     const cfg = this.currentDifficulty();
@@ -262,6 +285,12 @@ export class Game {
     unlockAudio(this.audio);
     this.audio.bgm.currentTime = 0;
     playBackgroundMusic(this.audio);
+  }
+
+  async startFromEntry() {
+    if (await this.confirmEntryModal()) {
+      this.resetGame();
+    }
   }
 
   startBufferedJump() {
@@ -701,18 +730,12 @@ export class Game {
     for (const button of this.dom.difficultyBtns) {
       button.addEventListener("click", () => this.setDifficulty(button.dataset.difficulty));
     }
-    this.dom.entryStartBtn.addEventListener("click", () => {
-      if (this.closeEntryModal()) {
-        this.resetGame();
-      }
-    });
+    this.dom.entryStartBtn.addEventListener("click", () => this.startFromEntry());
     this.dom.entryRankBtn.addEventListener("click", () => this.leaderboard.open());
     this.dom.playerNameInput.addEventListener("keydown", (event) => {
       if (event.code === "Enter") {
         event.preventDefault();
-        if (this.closeEntryModal()) {
-          this.resetGame();
-        }
+        this.startFromEntry();
       }
     });
     this.dom.rankBtn.addEventListener("click", () => this.leaderboard.open());

@@ -1,4 +1,4 @@
-import { CANVAS, ENTITY_KIND } from "../config/constants.js?v=20260616-1405";
+import { CANVAS, ENTITY_KIND } from "../config/constants.js?v=20260616-1420";
 
 export function playerBox(player) {
   if (player.ducking) {

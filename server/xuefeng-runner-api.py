@@ -766,6 +766,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/session':
             self.issue_session()
             return
+        if path == '/api/name-check':
+            self.check_name()
+            return
         if path != '/api/leaderboard':
             self.send_json(404, {'error': 'not_found'})
             return
@@ -788,6 +791,22 @@ class Handler(BaseHTTPRequestHandler):
             'ok': True,
             'session': token,
             'expires_in': SESSION_MAX_AGE,
+        })
+
+    def check_name(self):
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        raw_name = (query.get('name') or [''])[0]
+        name = clean_name(raw_name)
+        if name is None:
+            self.send_json(200, {
+                'ok': False,
+                'error': 'bad_name',
+                'reason': forbidden_name_reason(raw_name) or 'bad_name',
+            })
+            return
+        self.send_json(200, {
+            'ok': True,
+            'name': name,
         })
 
     def do_POST(self):

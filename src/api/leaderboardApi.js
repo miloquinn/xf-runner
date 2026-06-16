@@ -38,6 +38,23 @@ export async function createCloudSession(difficulty) {
   };
 }
 
+export async function validateCloudName(name) {
+  const params = new URLSearchParams({ name });
+  const response = await fetch(`/api/name-check?${params.toString()}`, {
+    headers: { "Accept": "application/json" },
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new Error(`name-check ${response.status}`);
+  }
+  const data = await response.json();
+  return {
+    ok: Boolean(data.ok),
+    name: String(data.name || ""),
+    reason: String(data.reason || data.error || "")
+  };
+}
+
 export async function submitCloudScore(entry) {
   const response = await fetch("/api/score", {
     method: "POST",
