@@ -31,13 +31,15 @@ https://zxf.oorigo.tech/
 │   ├── icecream-*.png
 │   ├── soda-bottle.png
 │   └── power-*.png
-└── src/
-    ├── main.js
-    ├── api/
-    ├── config/
-    ├── core/
-    ├── systems/
-    └── ui/
+├── src/
+│   ├── main.js
+│   ├── api/
+│   ├── config/
+│   ├── core/
+│   ├── systems/
+│   └── ui/
+└── server/
+    └── xuefeng-runner-api.py
 ```
 
 主要模块：
@@ -74,6 +76,8 @@ http://127.0.0.1:4173/
 
 - `GET /api/leaderboard`
 - `POST /api/score`
+
+线上后端脚本位于 `/usr/local/bin/xuefeng-runner-api.py`，仓库副本在 `server/xuefeng-runner-api.py`。后端会拒绝非法难度、空名字、`__` 开头的探测名、非整数分数和明显不可能的超高分。
 
 `GET /api/leaderboard` 返回示例：
 
