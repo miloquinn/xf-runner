@@ -1,7 +1,7 @@
-import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1255";
-import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1255";
-import { EFFECTS } from "../config/powerups.js?v=20260616-1255";
-import { loadAssets } from "./assets.js?v=20260616-1255";
+import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1320";
+import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1320";
+import { EFFECTS } from "../config/powerups.js?v=20260616-1320";
+import { loadAssets } from "./assets.js?v=20260616-1320";
 import {
   createAudioController,
   pauseBackgroundMusic,
@@ -9,7 +9,7 @@ import {
   playGameOverSound,
   setSoundEnabled,
   unlockAudio
-} from "./audio.js?v=20260616-1255";
+} from "./audio.js?v=20260616-1320";
 import {
   cleanName,
   advanceReviveProgress,
@@ -20,24 +20,24 @@ import {
   saveHiScore,
   savePlayerName,
   saveReviveState
-} from "./storage.js?v=20260616-1255";
-import { isTypingTarget } from "../ui/dom.js?v=20260616-1255";
-import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1255";
+} from "./storage.js?v=20260616-1320";
+import { isTypingTarget } from "../ui/dom.js?v=20260616-1320";
+import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1320";
 import {
   activateEffect,
   hasEffect,
   isInvulnerable,
   updateEffects,
   updateLandingInvulnerability
-} from "../systems/effectSystem.js?v=20260616-1255";
-import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1255";
-import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1255";
+} from "../systems/effectSystem.js?v=20260616-1320";
+import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1320";
+import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1320";
 import {
   nextCollectibleDelay,
   spawnCollectible,
   spawnObstacle
-} from "../systems/spawnSystem.js?v=20260616-1255";
-import { createRenderer } from "../systems/renderSystem.js?v=20260616-1255";
+} from "../systems/spawnSystem.js?v=20260616-1320";
+import { createRenderer } from "../systems/renderSystem.js?v=20260616-1320";
 
 export class Game {
   constructor(dom) {
@@ -220,6 +220,7 @@ export class Game {
     }
     const cfg = this.currentDifficulty();
     this.setMode(GAME_MODE.RUNNING);
+    this.leaderboard.startSession(cfg.label);
     Object.assign(this.state, {
       score: 0,
       baseScore: 0,

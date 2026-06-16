@@ -19,6 +19,25 @@ export async function fetchCloudLeaderboard() {
   };
 }
 
+export async function createCloudSession(difficulty) {
+  const params = new URLSearchParams({ difficulty });
+  const response = await fetch(`/api/session?${params.toString()}`, {
+    headers: { "Accept": "application/json" },
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new Error(`session ${response.status}`);
+  }
+  const data = await response.json();
+  if (!data.session) {
+    throw new Error("invalid session response");
+  }
+  return {
+    session: String(data.session),
+    expiresIn: Number(data.expires_in ?? data.expiresIn ?? 0) || 0
+  };
+}
+
 export async function submitCloudScore(entry) {
   const response = await fetch("/api/score", {
     method: "POST",

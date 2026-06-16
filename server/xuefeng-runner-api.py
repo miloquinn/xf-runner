@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import base64
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import tempfile
 import time
 import fcntl
@@ -15,11 +19,16 @@ DATA_DIR = Path(os.environ.get('XUEFENG_RUNNER_DATA_DIR', '/var/lib/xuefeng-runn
 DATA_FILE = DATA_DIR / 'scores.json'
 META_FILE = DATA_DIR / 'meta.json'
 LOCK_FILE = DATA_DIR / 'scores.lock'
+SECRET_FILE = DATA_DIR / 'api-secret.key'
 MAX_BODY = 4096
-MAX_SCORE = int(os.environ.get('XUEFENG_RUNNER_MAX_SCORE', '200000'))
+MAX_SCORE = int(os.environ.get('XUEFENG_RUNNER_MAX_SCORE', '180000'))
 MAX_NAME_LENGTH = 12
 ALLOWED_DIFFICULTIES = {'简单', '普通', '困难'}
 MAX_META_ITEMS = 300
+SESSION_MAX_AGE = int(os.environ.get('XUEFENG_RUNNER_SESSION_MAX_AGE', '2700'))
+SESSION_MIN_AGE = float(os.environ.get('XUEFENG_RUNNER_SESSION_MIN_AGE', '2.0'))
+SESSION_SCORE_GRACE = int(os.environ.get('XUEFENG_RUNNER_SESSION_SCORE_GRACE', '12000'))
+SESSION_SCORE_PER_SECOND = int(os.environ.get('XUEFENG_RUNNER_SESSION_SCORE_PER_SECOND', '1700'))
 IP_LOOKUP_ENABLED = os.environ.get('XUEFENG_RUNNER_IP_LOOKUP', '1') != '0'
 IP_LOOKUP_TIMEOUT = float(os.environ.get('XUEFENG_RUNNER_IP_LOOKUP_TIMEOUT', '1.2'))
 IP_LOOKUP_CACHE_TTL = int(os.environ.get('XUEFENG_RUNNER_IP_LOOKUP_CACHE_TTL', '86400'))
@@ -127,6 +136,12 @@ def ensure_store():
         DATA_FILE.write_text('[]\n')
     if not LOCK_FILE.exists():
         LOCK_FILE.write_text('')
+    if not SECRET_FILE.exists():
+        SECRET_FILE.write_text(secrets.token_urlsafe(48))
+        try:
+            SECRET_FILE.chmod(0o600)
+        except OSError:
+            pass
 
 
 def clean_name(value):
@@ -176,6 +191,79 @@ def clean_region(value):
     if value in {'中国大陆', '中國大陸'}:
         return UNKNOWN_CHINA_REGION
     return value
+
+
+def b64url_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b'=').decode('ascii')
+
+
+def b64url_decode(value):
+    padding = '=' * (-len(value) % 4)
+    return base64.urlsafe_b64decode((value + padding).encode('ascii'))
+
+
+def signing_secret():
+    ensure_store()
+    return SECRET_FILE.read_text().strip().encode('utf-8')
+
+
+def sign_session_payload(payload):
+    body = json.dumps(payload, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')
+    signature = hmac.new(signing_secret(), body, hashlib.sha256).digest()
+    return f'{b64url_encode(body)}.{b64url_encode(signature)}'
+
+
+def create_session_token(difficulty):
+    session = {
+        'v': 1,
+        'iat': time.time(),
+        'sid': secrets.token_urlsafe(18),
+        'difficulty': difficulty,
+    }
+    return sign_session_payload(session)
+
+
+def parse_session_token(token):
+    try:
+        body_part, signature_part = str(token or '').split('.', 1)
+        body = b64url_decode(body_part)
+        signature = b64url_decode(signature_part)
+    except Exception:
+        return None
+    expected = hmac.new(signing_secret(), body, hashlib.sha256).digest()
+    if not hmac.compare_digest(signature, expected):
+        return None
+    try:
+        session = json.loads(body.decode('utf-8'))
+    except Exception:
+        return None
+    if not isinstance(session, dict) or session.get('v') != 1:
+        return None
+    return session
+
+
+def validate_score_session(payload, entry, meta):
+    session = parse_session_token(payload.get('session'))
+    if session is None:
+        return 'bad_session'
+    sid = str(session.get('sid') or '')
+    if not sid:
+        return 'bad_session'
+    if sid in meta.get('used_sessions', {}):
+        return 'used_session'
+    issued_at = float(session.get('iat') or 0)
+    age = time.time() - issued_at
+    if age < SESSION_MIN_AGE:
+        return 'session_too_new'
+    if age > SESSION_MAX_AGE:
+        return 'session_expired'
+    if session.get('difficulty') != entry['difficulty']:
+        return 'bad_session_difficulty'
+    allowed_score = min(MAX_SCORE, int(SESSION_SCORE_GRACE + age * SESSION_SCORE_PER_SECOND))
+    if entry['score'] > allowed_score:
+        return 'score_too_fast'
+    meta.setdefault('used_sessions', {})[sid] = time.time() + SESSION_MAX_AGE
+    return None
 
 
 def normalize_china_region(region, region_code):
@@ -288,6 +376,22 @@ def compact_region_counts(counts, max_items=MAX_META_ITEMS):
     return dict(cleaned[:max_items])
 
 
+def compact_used_sessions(sessions):
+    now = time.time()
+    if not isinstance(sessions, dict):
+        return {}
+    rows = []
+    for key, value in sessions.items():
+        try:
+            expires_at = float(value)
+        except Exception:
+            continue
+        if expires_at > now:
+            rows.append((str(key)[:80], expires_at))
+    rows.sort(key=lambda item: item[1], reverse=True)
+    return dict(rows[:2000])
+
+
 def load_meta_unlocked(rows):
     try:
         meta = json.loads(META_FILE.read_text())
@@ -310,6 +414,7 @@ def load_meta_unlocked(rows):
         'total_games': max(total, len(rows)),
         'player_games': compact_counts(player_games),
         'region_stats': compact_region_counts(region_stats),
+        'used_sessions': compact_used_sessions(meta.get('used_sessions', {})),
     }
 
 
@@ -318,6 +423,7 @@ def save_meta_unlocked(meta):
         'total_games': max(0, int(meta.get('total_games', 0))),
         'player_games': compact_counts(meta.get('player_games', {})),
         'region_stats': compact_region_counts(meta.get('region_stats', {})),
+        'used_sessions': compact_used_sessions(meta.get('used_sessions', {})),
     }
     write_json_atomic(META_FILE, payload, prefix='meta-')
 
@@ -468,7 +574,7 @@ def leaderboard_payload(rows, meta):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'XuefengRunnerAPI/1.3'
+    server_version = 'XuefengRunnerAPI/1.4'
 
     def log_message(self, fmt, *args):
         return
@@ -483,7 +589,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path.split('?', 1)[0] != '/api/leaderboard':
+        path = self.path.split('?', 1)[0]
+        if path == '/api/session':
+            self.issue_session()
+            return
+        if path != '/api/leaderboard':
             self.send_json(404, {'error': 'not_found'})
             return
         ensure_store()
@@ -493,6 +603,19 @@ class Handler(BaseHTTPRequestHandler):
             meta = load_meta_unlocked(rows)
             fcntl.flock(lock, fcntl.LOCK_UN)
         self.send_json(200, leaderboard_payload(rows, meta))
+
+    def issue_session(self):
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        difficulty = clean_difficulty((query.get('difficulty') or [''])[0])
+        if difficulty is None:
+            self.send_json(400, {'error': 'bad_difficulty'})
+            return
+        token = create_session_token(difficulty)
+        self.send_json(200, {
+            'ok': True,
+            'session': token,
+            'expires_in': SESSION_MAX_AGE,
+        })
 
     def do_POST(self):
         if self.path.split('?', 1)[0] != '/api/score':
@@ -516,6 +639,11 @@ class Handler(BaseHTTPRequestHandler):
             fcntl.flock(lock, fcntl.LOCK_EX)
             rows = load_scores_unlocked()
             meta = load_meta_unlocked(rows)
+            session_error = validate_score_session(payload, entry, meta)
+            if session_error:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+                self.send_json(400, {'error': session_error})
+                return
             meta['total_games'] += 1
             meta['player_games'][entry['name']] = meta['player_games'].get(entry['name'], 0) + 1
             region = client_region(self.headers, self.client_address)

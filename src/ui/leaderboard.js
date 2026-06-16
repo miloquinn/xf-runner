@@ -1,4 +1,4 @@
-import { fetchCloudLeaderboard, submitCloudScore } from "../api/leaderboardApi.js?v=20260616-1255";
+import { createCloudSession, fetchCloudLeaderboard, submitCloudScore } from "../api/leaderboardApi.js?v=20260616-1320";
 import {
   cleanName,
   escapeHtml,
@@ -7,7 +7,7 @@ import {
   pad,
   saveLeaderboard,
   saveTotalGames
-} from "../core/storage.js?v=20260616-1255";
+} from "../core/storage.js?v=20260616-1320";
 
 export function bestScoresByPlayer(rows, difficulty) {
   const best = new Map();
@@ -33,6 +33,8 @@ export function bestScoresByPlayer(rows, difficulty) {
 export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName) {
   const emptyInsights = { regionStats: [], playerGames: [] };
   let latestInsights = emptyInsights;
+  let activeSession = "";
+  let sessionRequestId = 0;
 
   function updateMeta(totalGames = loadTotalGames(), totalPlayers = state.totalPlayers) {
     const games = Math.max(0, Number(totalGames) || 0);
@@ -194,8 +196,10 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     const entry = {
       name: getPlayerName() || "同学",
       score: finalScore,
-      difficulty: getDifficultyLabel()
+      difficulty: getDifficultyLabel(),
+      session: activeSession
     };
+    activeSession = "";
     const rows = loadLeaderboard();
     rows.push({ ...entry, at: new Date().toISOString() });
     saveLeaderboard(rows, bestScoresByPlayer);
@@ -225,6 +229,20 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     render();
   }
 
+  function startSession(difficulty) {
+    activeSession = "";
+    const requestId = ++sessionRequestId;
+    createCloudSession(difficulty)
+      .then((result) => {
+        if (requestId === sessionRequestId) {
+          activeSession = result.session;
+        }
+      })
+      .catch((error) => {
+        console.warn("开局令牌获取失败，本局可能只保留本地成绩", error);
+      });
+  }
+
   function close() {
     dom.leaderboardModal.hidden = true;
   }
@@ -234,6 +252,7 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     updateTabs,
     render,
     recordScore,
+    startSession,
     open,
     close
   };

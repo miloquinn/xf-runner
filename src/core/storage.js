@@ -1,4 +1,4 @@
-import { REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1255";
+import { REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1320";
 
 export function pad(value) {
   return String(Math.max(0, Math.floor(value))).padStart(5, "0");

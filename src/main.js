@@ -1,5 +1,5 @@
-import { getDom } from "./ui/dom.js?v=20260616-1255";
-import { Game } from "./core/game.js?v=20260616-1255";
+import { getDom } from "./ui/dom.js?v=20260616-1320";
+import { Game } from "./core/game.js?v=20260616-1320";
 
 const game = new Game(getDom());
 game.start();
