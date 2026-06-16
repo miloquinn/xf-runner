@@ -1,4 +1,4 @@
-import { PATHS } from "../config/constants.js?v=20260615-1015";
+import { PATHS } from "../config/constants.js?v=20260616-1220";
 
 function loadAsset(name) {
   const img = new Image();

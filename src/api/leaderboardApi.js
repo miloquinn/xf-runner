@@ -13,7 +13,9 @@ export async function fetchCloudLeaderboard() {
   return {
     scores: data.scores,
     totalGames: Number(data.total_games ?? data.totalGames ?? data.scores.length) || 0,
-    totalPlayers: Number(data.total_players ?? data.totalPlayers ?? 0) || 0
+    totalPlayers: Number(data.total_players ?? data.totalPlayers ?? 0) || 0,
+    regionStats: Array.isArray(data.region_stats) ? data.region_stats : [],
+    playerGames: Array.isArray(data.player_games) ? data.player_games : []
   };
 }
 
@@ -33,6 +35,8 @@ export async function submitCloudScore(entry) {
   return {
     scores: Array.isArray(data.scores) ? data.scores : [],
     totalGames: Number(data.total_games ?? data.totalGames ?? 0) || 0,
-    totalPlayers: Number(data.total_players ?? data.totalPlayers ?? 0) || 0
+    totalPlayers: Number(data.total_players ?? data.totalPlayers ?? 0) || 0,
+    regionStats: Array.isArray(data.region_stats) ? data.region_stats : [],
+    playerGames: Array.isArray(data.player_games) ? data.player_games : []
   };
 }

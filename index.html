@@ -440,6 +440,79 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .leaderboard-insights {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .leaderboard-insights[hidden] {
+      display: none;
+    }
+
+    .insight-card {
+      display: grid;
+      gap: 8px;
+      border: 2px solid rgba(23, 27, 29, 0.16);
+      border-radius: 8px;
+      padding: 10px;
+      background: #f7f8f0;
+    }
+
+    .insight-card h3 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.1;
+    }
+
+    .insight-card small {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1.35;
+    }
+
+    .insight-bars,
+    .insight-rank {
+      display: grid;
+      gap: 6px;
+    }
+
+    .insight-bar {
+      display: grid;
+      grid-template-columns: minmax(54px, 0.8fr) minmax(84px, 1.4fr) 38px;
+      gap: 7px;
+      align-items: center;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .insight-track {
+      height: 9px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(23, 27, 29, 0.12);
+    }
+
+    .insight-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: var(--green);
+    }
+
+    .insight-rank-row {
+      display: grid;
+      grid-template-columns: 26px 1fr 44px;
+      gap: 6px;
+      align-items: center;
+      min-height: 26px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
     .orientation-note {
       display: none;
       border: 3px solid var(--ink);
@@ -674,6 +747,10 @@
       .modal-actions {
         grid-template-columns: 1fr;
       }
+
+      .leaderboard-insights {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 860px) and (orientation: portrait) {
@@ -825,6 +902,10 @@
         font-size: 13px;
       }
 
+      .leaderboard-insights {
+        grid-template-columns: 1fr 1fr;
+      }
+
       .settings {
         display: none;
       }
@@ -932,6 +1013,7 @@
         <button class="leaderboardTab" type="button" data-difficulty="困难" aria-pressed="false">困难</button>
       </div>
       <div id="leaderboardList" class="leaderboard-list"></div>
+      <div id="leaderboardInsights" class="leaderboard-insights" hidden></div>
       <div id="currentRankSummary" class="current-rank-summary" hidden></div>
       <div class="modal-actions leaderboard-actions">
         <button id="closeLeaderboardBtn" type="button">关闭</button>
@@ -966,6 +1048,6 @@
     </section>
   </div>
 
-  <script type="module" src="./src/main.js?v=20260615-1015"></script>
+  <script type="module" src="./src/main.js?v=20260616-1220"></script>
 </body>
 </html>

@@ -15,6 +15,27 @@ MAX_BODY = 4096
 MAX_SCORE = int(os.environ.get('XUEFENG_RUNNER_MAX_SCORE', '200000'))
 MAX_NAME_LENGTH = 12
 ALLOWED_DIFFICULTIES = {'简单', '普通', '困难'}
+MAX_META_ITEMS = 300
+UNKNOWN_REGION = '未知'
+LOCAL_REGION = '本地'
+COUNTRY_NAMES = {
+    'CN': '中国大陆',
+    'HK': '中国香港',
+    'MO': '中国澳门',
+    'TW': '中国台湾',
+    'US': '美国',
+    'SG': '新加坡',
+    'JP': '日本',
+    'KR': '韩国',
+    'GB': '英国',
+    'CA': '加拿大',
+    'AU': '澳大利亚',
+    'DE': '德国',
+    'FR': '法国',
+    'MY': '马来西亚',
+    'TH': '泰国',
+    'VN': '越南',
+}
 
 
 def ensure_store():
@@ -50,6 +71,26 @@ def clean_score(value):
     if score <= 0 or score > MAX_SCORE:
         return None
     return score
+
+
+def clean_count(value):
+    if isinstance(value, bool):
+        return None
+    try:
+        count = int(value)
+    except Exception:
+        return None
+    if count <= 0:
+        return None
+    return min(count, 100000000)
+
+
+def clean_region(value):
+    value = str(value or '').strip()
+    value = ' '.join(value.split())[:24]
+    if not value or value.startswith('__'):
+        return UNKNOWN_REGION
+    return value
 
 
 def clean_row(row):
@@ -97,18 +138,72 @@ def load_scores_unlocked():
     return best_scores(rows)
 
 
-def load_total_games_unlocked(rows):
+def seed_player_games(rows):
+    seeded = {}
+    for row in rows:
+        clean = clean_row(row)
+        if clean is None:
+            continue
+        seeded[clean['name']] = max(1, seeded.get(clean['name'], 0))
+    return seeded
+
+
+def compact_counts(counts, max_items=MAX_META_ITEMS):
+    cleaned = []
+    for key, value in counts.items():
+        count = clean_count(value)
+        if count is None:
+            continue
+        label = clean_name(key) or clean_region(key)
+        if label:
+            cleaned.append((label, count))
+    cleaned.sort(key=lambda item: (-item[1], item[0]))
+    return dict(cleaned[:max_items])
+
+
+def compact_region_counts(counts, max_items=MAX_META_ITEMS):
+    cleaned = []
+    for key, value in counts.items():
+        count = clean_count(value)
+        if count is None:
+            continue
+        label = clean_region(key)
+        cleaned.append((label, count))
+    cleaned.sort(key=lambda item: (-item[1], item[0]))
+    return dict(cleaned[:max_items])
+
+
+def load_meta_unlocked(rows):
     try:
         meta = json.loads(META_FILE.read_text())
         total = int(meta.get('total_games', 0))
     except Exception:
+        meta = {}
         total = len(rows)
-        save_total_games_unlocked(total)
-    return max(total, len(rows))
+    player_games = compact_counts(meta.get('player_games', {})) if isinstance(meta.get('player_games'), dict) else {}
+    if not player_games:
+        player_games = seed_player_games(rows)
+    else:
+        for name, count in seed_player_games(rows).items():
+            player_games[name] = max(count, player_games.get(name, 0))
+    region_stats = (
+        compact_region_counts(meta.get('region_stats', {}))
+        if isinstance(meta.get('region_stats'), dict)
+        else {}
+    )
+    return {
+        'total_games': max(total, len(rows)),
+        'player_games': compact_counts(player_games),
+        'region_stats': compact_region_counts(region_stats),
+    }
 
 
-def save_total_games_unlocked(total):
-    payload = {'total_games': max(0, int(total))}
+def save_meta_unlocked(meta):
+    payload = {
+        'total_games': max(0, int(meta.get('total_games', 0))),
+        'player_games': compact_counts(meta.get('player_games', {})),
+        'region_stats': compact_region_counts(meta.get('region_stats', {})),
+    }
     write_json_atomic(META_FILE, payload, prefix='meta-')
 
 
@@ -137,6 +232,38 @@ def validated_entry(payload):
     }, None
 
 
+def client_region(headers, client_address):
+    country = (headers.get('CF-IPCountry') or '').strip().upper()
+    if country and country not in {'XX', 'T1'}:
+        return COUNTRY_NAMES.get(country, country)
+    ip = ''
+    if client_address:
+        ip = str(client_address[0] or '')
+    if ip.startswith('127.') or ip == '::1':
+        return LOCAL_REGION
+    return UNKNOWN_REGION
+
+
+def ranked_counts(counts, limit=100):
+    rows = [
+        {'name': str(name), 'games': int(games)}
+        for name, games in counts.items()
+        if clean_count(games) is not None
+    ]
+    rows.sort(key=lambda row: (-row['games'], row['name']))
+    return rows[:limit]
+
+
+def ranked_regions(counts, limit=20):
+    rows = [
+        {'region': clean_region(region), 'games': int(games)}
+        for region, games in counts.items()
+        if clean_count(games) is not None
+    ]
+    rows.sort(key=lambda row: (-row['games'], row['region']))
+    return rows[:limit]
+
+
 def write_json_atomic(path, payload, prefix):
     fd, tmp = tempfile.mkstemp(prefix=prefix, suffix='.json', dir=str(DATA_DIR))
     try:
@@ -151,20 +278,22 @@ def write_json_atomic(path, payload, prefix):
             pass
 
 
-def leaderboard_payload(rows, total_games):
+def leaderboard_payload(rows, meta):
     return {
         'scores': best_scores(rows),
-        'total_games': total_games,
+        'total_games': meta['total_games'],
         'total_players': len({row['name'] for row in rows}),
         'players_by_difficulty': {
             diff: sum(1 for row in rows if row['difficulty'] == diff)
             for diff in ('简单', '普通', '困难')
         },
+        'region_stats': ranked_regions(meta.get('region_stats', {})),
+        'player_games': ranked_counts(meta.get('player_games', {})),
     }
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'XuefengRunnerAPI/1.2'
+    server_version = 'XuefengRunnerAPI/1.3'
 
     def log_message(self, fmt, *args):
         return
@@ -186,9 +315,9 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK_FILE.open('r+') as lock:
             fcntl.flock(lock, fcntl.LOCK_SH)
             rows = load_scores_unlocked()
-            total_games = load_total_games_unlocked(rows)
+            meta = load_meta_unlocked(rows)
             fcntl.flock(lock, fcntl.LOCK_UN)
-        self.send_json(200, leaderboard_payload(rows, total_games))
+        self.send_json(200, leaderboard_payload(rows, meta))
 
     def do_POST(self):
         if self.path.split('?', 1)[0] != '/api/score':
@@ -211,13 +340,17 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK_FILE.open('r+') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             rows = load_scores_unlocked()
-            total_games = load_total_games_unlocked(rows) + 1
+            meta = load_meta_unlocked(rows)
+            meta['total_games'] += 1
+            meta['player_games'][entry['name']] = meta['player_games'].get(entry['name'], 0) + 1
+            region = client_region(self.headers, self.client_address)
+            meta['region_stats'][region] = meta['region_stats'].get(region, 0) + 1
             rows.append(entry)
             rows = best_scores(rows)
             save_scores_unlocked(rows)
-            save_total_games_unlocked(total_games)
+            save_meta_unlocked(meta)
             fcntl.flock(lock, fcntl.LOCK_UN)
-        self.send_json(200, {'ok': True, **leaderboard_payload(rows, total_games)})
+        self.send_json(200, {'ok': True, **leaderboard_payload(rows, meta)})
 
 
 if __name__ == '__main__':

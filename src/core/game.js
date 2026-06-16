@@ -1,7 +1,7 @@
-import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260615-1015";
-import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260615-1015";
-import { EFFECTS } from "../config/powerups.js?v=20260615-1015";
-import { loadAssets } from "./assets.js?v=20260615-1015";
+import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1220";
+import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1220";
+import { EFFECTS } from "../config/powerups.js?v=20260616-1220";
+import { loadAssets } from "./assets.js?v=20260616-1220";
 import {
   createAudioController,
   pauseBackgroundMusic,
@@ -9,7 +9,7 @@ import {
   playGameOverSound,
   setSoundEnabled,
   unlockAudio
-} from "./audio.js?v=20260615-1015";
+} from "./audio.js?v=20260616-1220";
 import {
   cleanName,
   advanceReviveProgress,
@@ -20,24 +20,24 @@ import {
   saveHiScore,
   savePlayerName,
   saveReviveState
-} from "./storage.js?v=20260615-1015";
-import { isTypingTarget } from "../ui/dom.js?v=20260615-1015";
-import { createLeaderboard } from "../ui/leaderboard.js?v=20260615-1015";
+} from "./storage.js?v=20260616-1220";
+import { isTypingTarget } from "../ui/dom.js?v=20260616-1220";
+import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1220";
 import {
   activateEffect,
   hasEffect,
   isInvulnerable,
   updateEffects,
   updateLandingInvulnerability
-} from "../systems/effectSystem.js?v=20260615-1015";
-import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260615-1015";
-import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260615-1015";
+} from "../systems/effectSystem.js?v=20260616-1220";
+import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1220";
+import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1220";
 import {
   nextCollectibleDelay,
   spawnCollectible,
   spawnObstacle
-} from "../systems/spawnSystem.js?v=20260615-1015";
-import { createRenderer } from "../systems/renderSystem.js?v=20260615-1015";
+} from "../systems/spawnSystem.js?v=20260616-1220";
+import { createRenderer } from "../systems/renderSystem.js?v=20260616-1220";
 
 export class Game {
   constructor(dom) {

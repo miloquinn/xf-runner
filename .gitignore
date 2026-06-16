@@ -53,6 +53,9 @@ secret*.json
 *.db
 *.sqlite
 *.sqlite3
+scores.json
+meta.json
+scores.lock
 *.bak
 *.backup
 *.dump
