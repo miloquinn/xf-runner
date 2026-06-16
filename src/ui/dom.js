@@ -13,6 +13,7 @@ export function getDom() {
     soundBtn: document.getElementById("soundBtn"),
     rankBtn: document.getElementById("rankBtn"),
     feedbackBtn: document.getElementById("feedbackBtn"),
+    shareBtn: document.getElementById("shareBtn"),
     pauseBtn: document.getElementById("pauseBtn"),
     restartBtn: document.getElementById("restartBtn"),
     difficultyBtns: [...document.querySelectorAll(".difficultyBtn")],

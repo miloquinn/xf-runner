@@ -1,5 +1,5 @@
-import { CANVAS, ENTITY_KIND } from "../config/constants.js?v=20260616-1420";
-import { assetReady } from "../core/assets.js?v=20260616-1420";
+import { CANVAS, ENTITY_KIND } from "../config/constants.js?v=20260616-1435";
+import { assetReady } from "../core/assets.js?v=20260616-1435";
 
 export function createRenderer(dom, assets, state, player) {
   const ctx = dom.ctx;

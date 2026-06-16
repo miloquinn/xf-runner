@@ -1,5 +1,5 @@
-import { CANVAS, ENTITY_KIND } from "../config/constants.js?v=20260616-1420";
-import { COLLECTIBLES } from "../config/powerups.js?v=20260616-1420";
+import { CANVAS, ENTITY_KIND } from "../config/constants.js?v=20260616-1435";
+import { COLLECTIBLES } from "../config/powerups.js?v=20260616-1435";
 
 export function groundObstaclePool(cfg, pressure) {
   const pool = cfg.groundHeights.map((entry) => ({ ...entry }));

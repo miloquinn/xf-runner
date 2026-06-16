@@ -1,7 +1,7 @@
-import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1420";
-import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1420";
-import { EFFECTS } from "../config/powerups.js?v=20260616-1420";
-import { loadAssets } from "./assets.js?v=20260616-1420";
+import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1435";
+import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1435";
+import { EFFECTS } from "../config/powerups.js?v=20260616-1435";
+import { loadAssets } from "./assets.js?v=20260616-1435";
 import {
   createAudioController,
   pauseBackgroundMusic,
@@ -9,7 +9,7 @@ import {
   playGameOverSound,
   setSoundEnabled,
   unlockAudio
-} from "./audio.js?v=20260616-1420";
+} from "./audio.js?v=20260616-1435";
 import {
   cleanName,
   advanceReviveProgress,
@@ -20,25 +20,25 @@ import {
   saveHiScore,
   savePlayerName,
   saveReviveState
-} from "./storage.js?v=20260616-1420";
-import { isTypingTarget } from "../ui/dom.js?v=20260616-1420";
-import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1420";
-import { validateCloudName } from "../api/leaderboardApi.js?v=20260616-1420";
+} from "./storage.js?v=20260616-1435";
+import { isTypingTarget } from "../ui/dom.js?v=20260616-1435";
+import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1435";
+import { validateCloudName } from "../api/leaderboardApi.js?v=20260616-1435";
 import {
   activateEffect,
   hasEffect,
   isInvulnerable,
   updateEffects,
   updateLandingInvulnerability
-} from "../systems/effectSystem.js?v=20260616-1420";
-import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1420";
-import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1420";
+} from "../systems/effectSystem.js?v=20260616-1435";
+import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1435";
+import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1435";
 import {
   nextCollectibleDelay,
   spawnCollectible,
   spawnObstacle
-} from "../systems/spawnSystem.js?v=20260616-1420";
-import { createRenderer } from "../systems/renderSystem.js?v=20260616-1420";
+} from "../systems/spawnSystem.js?v=20260616-1435";
+import { createRenderer } from "../systems/renderSystem.js?v=20260616-1435";
 
 export class Game {
   constructor(dom) {
@@ -290,6 +290,27 @@ export class Game {
   async startFromEntry() {
     if (await this.confirmEntryModal()) {
       this.resetGame();
+    }
+  }
+
+  async shareGame() {
+    const shareData = {
+      title: "雪峰快跑",
+      text: "跳冰淇淋，躲雪碧，冲排行榜。来试试这个网页小游戏。",
+      url: "https://zxf.oorigo.tech/"
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+      await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
+      this.showMessage("链接已复制", "发给朋友，看看谁能跑进前100。");
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return;
+      }
+      this.showMessage("分享链接", shareData.url);
     }
   }
 
@@ -771,6 +792,7 @@ export class Game {
     this.dom.feedbackBtn.addEventListener("click", () => {
       this.dom.feedbackModal.hidden = false;
     });
+    this.dom.shareBtn.addEventListener("click", () => this.shareGame());
     this.dom.closeFeedbackBtn.addEventListener("click", () => {
       this.dom.feedbackModal.hidden = true;
     });
