@@ -1,4 +1,4 @@
-import { CANVAS, COLLECTIBLE_KIND } from "./constants.js?v=20260616-1235";
+import { CANVAS, COLLECTIBLE_KIND } from "./constants.js?v=20260616-1255";
 
 export const EFFECTS = {
   score5: {

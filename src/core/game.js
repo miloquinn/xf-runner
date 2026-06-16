@@ -1,7 +1,7 @@
-import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1235";
-import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1235";
-import { EFFECTS } from "../config/powerups.js?v=20260616-1235";
-import { loadAssets } from "./assets.js?v=20260616-1235";
+import { CANVAS, GAME_MODE, PHYSICS, REVIVE_RULES, STORAGE_KEYS } from "../config/constants.js?v=20260616-1255";
+import { DIFFICULTIES, difficultyFor } from "../config/difficulties.js?v=20260616-1255";
+import { EFFECTS } from "../config/powerups.js?v=20260616-1255";
+import { loadAssets } from "./assets.js?v=20260616-1255";
 import {
   createAudioController,
   pauseBackgroundMusic,
@@ -9,7 +9,7 @@ import {
   playGameOverSound,
   setSoundEnabled,
   unlockAudio
-} from "./audio.js?v=20260616-1235";
+} from "./audio.js?v=20260616-1255";
 import {
   cleanName,
   advanceReviveProgress,
@@ -20,24 +20,24 @@ import {
   saveHiScore,
   savePlayerName,
   saveReviveState
-} from "./storage.js?v=20260616-1235";
-import { isTypingTarget } from "../ui/dom.js?v=20260616-1235";
-import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1235";
+} from "./storage.js?v=20260616-1255";
+import { isTypingTarget } from "../ui/dom.js?v=20260616-1255";
+import { createLeaderboard } from "../ui/leaderboard.js?v=20260616-1255";
 import {
   activateEffect,
   hasEffect,
   isInvulnerable,
   updateEffects,
   updateLandingInvulnerability
-} from "../systems/effectSystem.js?v=20260616-1235";
-import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1235";
-import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1235";
+} from "../systems/effectSystem.js?v=20260616-1255";
+import { addScore, formatMultiplier, scorePressure, speedScoreMultiplier } from "../systems/scoring.js?v=20260616-1255";
+import { collides, collidesCollectible } from "../systems/collisionSystem.js?v=20260616-1255";
 import {
   nextCollectibleDelay,
   spawnCollectible,
   spawnObstacle
-} from "../systems/spawnSystem.js?v=20260616-1235";
-import { createRenderer } from "../systems/renderSystem.js?v=20260616-1235";
+} from "../systems/spawnSystem.js?v=20260616-1255";
+import { createRenderer } from "../systems/renderSystem.js?v=20260616-1255";
 
 export class Game {
   constructor(dom) {
@@ -83,6 +83,8 @@ export class Game {
       hasEntered: false,
       difficulty: DIFFICULTIES[savedDifficulty] ? savedDifficulty : "easy",
       leaderboardDifficulty: "简单",
+      leaderboardView: "score",
+      moreLeaderboardView: "region",
       totalPlayers: 0,
       effects: {},
       obstacles: [],
@@ -714,14 +716,26 @@ export class Game {
     this.dom.rankBtn.addEventListener("click", () => this.leaderboard.open());
     for (const button of this.dom.leaderboardTabs) {
       button.addEventListener("click", () => {
-        this.state.leaderboardDifficulty = button.dataset.difficulty;
+        if (button.dataset.view === "more") {
+          this.state.leaderboardView = "more";
+          this.state.moreLeaderboardView ||= "region";
+        } else {
+          this.state.leaderboardView = "score";
+          this.state.leaderboardDifficulty = button.dataset.difficulty;
+        }
+        this.leaderboard.updateTabs();
+        this.leaderboard.render();
+      });
+    }
+    for (const button of this.dom.leaderboardMoreChoiceBtns) {
+      button.addEventListener("click", () => {
+        this.state.moreLeaderboardView = button.dataset.moreView;
         this.leaderboard.updateTabs();
         this.leaderboard.render();
       });
     }
     this.dom.closeLeaderboardBtn.addEventListener("click", () => this.leaderboard.close());
     this.dom.clearLeaderboardBtn.addEventListener("click", () => this.leaderboard.render());
-    this.dom.leaderboardMoreBtn.addEventListener("click", () => this.leaderboard.toggleInsights());
     this.dom.leaderboardModal.addEventListener("click", (event) => {
       if (event.target === this.dom.leaderboardModal) {
         this.leaderboard.close();

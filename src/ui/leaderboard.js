@@ -1,4 +1,4 @@
-import { fetchCloudLeaderboard, submitCloudScore } from "../api/leaderboardApi.js?v=20260616-1235";
+import { fetchCloudLeaderboard, submitCloudScore } from "../api/leaderboardApi.js?v=20260616-1255";
 import {
   cleanName,
   escapeHtml,
@@ -7,7 +7,7 @@ import {
   pad,
   saveLeaderboard,
   saveTotalGames
-} from "../core/storage.js?v=20260616-1235";
+} from "../core/storage.js?v=20260616-1255";
 
 export function bestScoresByPlayer(rows, difficulty) {
   const best = new Map();
@@ -33,7 +33,6 @@ export function bestScoresByPlayer(rows, difficulty) {
 export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName) {
   const emptyInsights = { regionStats: [], playerGames: [] };
   let latestInsights = emptyInsights;
-  let insightsExpanded = false;
 
   function updateMeta(totalGames = loadTotalGames(), totalPlayers = state.totalPlayers) {
     const games = Math.max(0, Number(totalGames) || 0);
@@ -44,7 +43,15 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
 
   function updateTabs() {
     for (const button of dom.leaderboardTabs) {
-      button.setAttribute("aria-pressed", button.dataset.difficulty === state.leaderboardDifficulty ? "true" : "false");
+      const isMore = button.dataset.view === "more";
+      const pressed = isMore
+        ? state.leaderboardView === "more"
+        : state.leaderboardView !== "more" && button.dataset.difficulty === state.leaderboardDifficulty;
+      button.setAttribute("aria-pressed", pressed ? "true" : "false");
+    }
+    dom.leaderboardMoreChoices.hidden = state.leaderboardView !== "more";
+    for (const button of dom.leaderboardMoreChoiceBtns) {
+      button.setAttribute("aria-pressed", button.dataset.moreView === state.moreLeaderboardView ? "true" : "false");
     }
   }
 
@@ -59,97 +66,6 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
       .filter((row) => row.label && row.games > 0);
   }
 
-  function hasInsightRows(insights = emptyInsights) {
-    return (
-      normalizeCountRows(insights.regionStats, "region").length > 0 ||
-      normalizeCountRows(insights.playerGames, "name").length > 0
-    );
-  }
-
-  function renderRegionStats(rows) {
-    const regions = normalizeCountRows(rows, "region").slice(0, 8);
-    if (!regions.length) {
-      return `
-        <section class="insight-card">
-          <h3>地区分布</h3>
-          <small>从新版上线后开始按地区统计，不保存明文 IP。</small>
-          <p>暂无地区数据。</p>
-        </section>
-      `;
-    }
-    const max = Math.max(...regions.map((row) => row.games), 1);
-    const bars = regions.map((row) => {
-      const width = Math.max(8, Math.round((row.games / max) * 100));
-      return `
-        <div class="insight-bar">
-          <span>${escapeHtml(row.label)}</span>
-          <span class="insight-track"><span class="insight-fill" style="width:${width}%"></span></span>
-          <span>${row.games}</span>
-        </div>
-      `;
-    });
-    return `
-      <section class="insight-card">
-        <h3>地区分布</h3>
-        <small>按提交成绩时的网络地区聚合，不展示 IP。</small>
-        <div class="insight-bars">${bars.join("")}</div>
-      </section>
-    `;
-  }
-
-  function renderPlayerGames(rows) {
-    const players = normalizeCountRows(rows, "name").slice(0, 8);
-    if (!players.length) {
-      return `
-        <section class="insight-card">
-          <h3>局数排名</h3>
-          <small>从新版上线后开始累计每个玩家提交局数。</small>
-          <p>暂无局数数据。</p>
-        </section>
-      `;
-    }
-    const list = players.map((row, index) => `
-      <div class="insight-rank-row">
-        <span>${index + 1}</span>
-        <span>${escapeHtml(row.label)}</span>
-        <span>${row.games}局</span>
-      </div>
-    `);
-    return `
-      <section class="insight-card">
-        <h3>局数排名</h3>
-        <small>历史旧数据只保留最高分，完整局数从新版开始累计。</small>
-        <div class="insight-rank">${list.join("")}</div>
-      </section>
-    `;
-  }
-
-  function renderInsights(insights = emptyInsights) {
-    dom.leaderboardInsights.hidden = false;
-    dom.leaderboardInsights.innerHTML = [
-      renderRegionStats(insights.regionStats),
-      renderPlayerGames(insights.playerGames)
-    ].join("");
-  }
-
-  function updateMoreButton() {
-    const hasRows = hasInsightRows(latestInsights);
-    dom.leaderboardMoreBtn.hidden = !hasRows;
-    dom.leaderboardMoreBtn.textContent = insightsExpanded ? "收起统计" : "展开更多";
-    dom.leaderboardMoreBtn.setAttribute("aria-expanded", insightsExpanded ? "true" : "false");
-    if (hasRows && insightsExpanded) {
-      renderInsights(latestInsights);
-    } else {
-      dom.leaderboardInsights.hidden = true;
-      dom.leaderboardInsights.innerHTML = "";
-    }
-  }
-
-  function toggleInsights() {
-    insightsExpanded = !insightsExpanded;
-    updateMoreButton();
-  }
-
   function rowHtml(row, rank, current) {
     const suffix = current ? " · 你" : "";
     return `
@@ -161,35 +77,21 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     `;
   }
 
-  async function render() {
-    dom.leaderboardList.innerHTML = "<p>正在读取排行榜...</p>";
-    dom.leaderboardMoreBtn.hidden = true;
-    dom.leaderboardInsights.hidden = true;
-    dom.leaderboardInsights.innerHTML = "";
-    dom.currentRankSummary.hidden = true;
-    dom.currentRankSummary.innerHTML = "";
-    updateMeta(loadTotalGames(), state.totalPlayers);
-    let rows;
-    latestInsights = emptyInsights;
-    try {
-      const result = await fetchCloudLeaderboard();
-      rows = result.scores;
-      latestInsights = {
-        regionStats: result.regionStats,
-        playerGames: result.playerGames
-      };
-      saveLeaderboard(rows, bestScoresByPlayer);
-      saveTotalGames(result.totalGames);
-      updateMeta(result.totalGames, result.totalPlayers);
-    } catch (error) {
-      console.warn("排行榜读取失败，显示本地缓存", error);
-      rows = loadLeaderboard();
-    }
+  function countRowHtml(row, rank, current = false) {
+    const suffix = current ? " · 你" : "";
+    return `
+      <div class="leaderboard-row${current ? " current-player" : ""}">
+        <span>${rank}</span>
+        <span>${escapeHtml(row.label)}${suffix}</span>
+        <span class="score">${row.games}局</span>
+      </div>
+    `;
+  }
 
+  function renderScoreRows(rows) {
     rows = bestScoresByPlayer(rows, state.leaderboardDifficulty);
     if (!rows.length) {
       dom.leaderboardList.innerHTML = '<p>这个难度还没有成绩，先跑一局。</p>';
-      updateMoreButton();
       return;
     }
 
@@ -207,7 +109,81 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     const remaining = Math.max(0, rows.length - visibleRows.length);
     html.push(`<div class="leaderboard-summary">本难度共 ${rows.length} 人，显示前 ${visibleRows.length} 名，剩余 ${remaining} 人未显示</div>`);
     dom.leaderboardList.innerHTML = html.join("");
-    updateMoreButton();
+  }
+
+  function renderCountRows(rows, options) {
+    const allRows = normalizeCountRows(rows, options.labelKey);
+    if (!allRows.length) {
+      dom.leaderboardList.innerHTML = `<p>${options.emptyText}</p>`;
+      return;
+    }
+
+    const playerName = cleanName(getPlayerName());
+    const currentIndex = options.trackCurrent && playerName
+      ? allRows.findIndex((row) => row.label === playerName)
+      : -1;
+    const visibleRows = allRows.slice(0, visibleLimit);
+    const html = visibleRows.map((row, index) => countRowHtml(row, index + 1, options.trackCurrent && index === currentIndex));
+    if (currentIndex >= visibleLimit) {
+      dom.currentRankSummary.hidden = false;
+      dom.currentRankSummary.innerHTML = `
+        <span>你的排名</span>
+        ${countRowHtml(allRows[currentIndex], currentIndex + 1, true)}
+      `;
+    }
+    const remaining = Math.max(0, allRows.length - visibleRows.length);
+    html.push(`<div class="leaderboard-summary">${options.summaryLabel}共 ${allRows.length} ${options.unit}，显示前 ${visibleRows.length} 名，剩余 ${remaining} ${options.unit}未显示</div>`);
+    dom.leaderboardList.innerHTML = html.join("");
+  }
+
+  function renderMoreRows() {
+    if (state.moreLeaderboardView === "games") {
+      renderCountRows(latestInsights.playerGames, {
+        labelKey: "name",
+        emptyText: "暂无局数数据，先跑一局。",
+        summaryLabel: "局数榜",
+        unit: "人",
+        trackCurrent: true
+      });
+      return;
+    }
+    renderCountRows(latestInsights.regionStats, {
+      labelKey: "region",
+      emptyText: "暂无地区数据，先跑一局。",
+      summaryLabel: "地区榜",
+      unit: "个地区",
+      trackCurrent: false
+    });
+  }
+
+  async function render() {
+    dom.leaderboardList.innerHTML = "<p>正在读取排行榜...</p>";
+    dom.currentRankSummary.hidden = true;
+    dom.currentRankSummary.innerHTML = "";
+    updateMeta(loadTotalGames(), state.totalPlayers);
+    updateTabs();
+    let rows;
+    latestInsights = emptyInsights;
+    try {
+      const result = await fetchCloudLeaderboard();
+      rows = result.scores;
+      latestInsights = {
+        regionStats: result.regionStats,
+        playerGames: result.playerGames
+      };
+      saveLeaderboard(rows, bestScoresByPlayer);
+      saveTotalGames(result.totalGames);
+      updateMeta(result.totalGames, result.totalPlayers);
+    } catch (error) {
+      console.warn("排行榜读取失败，显示本地缓存", error);
+      rows = loadLeaderboard();
+    }
+
+    if (state.leaderboardView === "more") {
+      renderMoreRows();
+      return;
+    }
+    renderScoreRows(rows);
   }
 
   async function recordScore(score) {
@@ -241,7 +217,8 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
   }
 
   function open() {
-    insightsExpanded = false;
+    state.leaderboardView = "score";
+    state.moreLeaderboardView = state.moreLeaderboardView || "region";
     state.leaderboardDifficulty = getDifficultyLabel();
     updateTabs();
     dom.leaderboardModal.hidden = false;
@@ -257,7 +234,6 @@ export function createLeaderboard(dom, state, getDifficultyLabel, getPlayerName)
     updateTabs,
     render,
     recordScore,
-    toggleInsights,
     open,
     close
   };

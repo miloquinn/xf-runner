@@ -17,6 +17,7 @@ MAX_NAME_LENGTH = 12
 ALLOWED_DIFFICULTIES = {'简单', '普通', '困难'}
 MAX_META_ITEMS = 300
 UNKNOWN_REGION = '未知'
+UNKNOWN_CHINA_REGION = '未知省份'
 LOCAL_REGION = '本地'
 COUNTRY_NAMES = {
     'CN': '中国大陆',
@@ -35,6 +36,80 @@ COUNTRY_NAMES = {
     'MY': '马来西亚',
     'TH': '泰国',
     'VN': '越南',
+}
+CHINA_REGION_NAMES = {
+    'AH': '安徽',
+    'BJ': '北京',
+    'CQ': '重庆',
+    'FJ': '福建',
+    'GD': '广东',
+    'GS': '甘肃',
+    'GX': '广西',
+    'GZ': '贵州',
+    'HA': '河南',
+    'HB': '湖北',
+    'HE': '河北',
+    'HI': '海南',
+    'HK': '香港',
+    'HL': '黑龙江',
+    'HN': '湖南',
+    'JL': '吉林',
+    'JS': '江苏',
+    'JX': '江西',
+    'LN': '辽宁',
+    'MO': '澳门',
+    'NM': '内蒙古',
+    'NX': '宁夏',
+    'QH': '青海',
+    'SC': '四川',
+    'SD': '山东',
+    'SH': '上海',
+    'SN': '陕西',
+    'SX': '山西',
+    'TJ': '天津',
+    'TW': '台湾',
+    'XJ': '新疆',
+    'XZ': '西藏',
+    'YN': '云南',
+    'ZJ': '浙江',
+}
+CHINA_REGION_ALIASES = {
+    'anhui': '安徽',
+    'beijing': '北京',
+    'chongqing': '重庆',
+    'fujian': '福建',
+    'guangdong': '广东',
+    'gansu': '甘肃',
+    'guangxi': '广西',
+    'guizhou': '贵州',
+    'henan': '河南',
+    'hubei': '湖北',
+    'hebei': '河北',
+    'hainan': '海南',
+    'hong kong': '香港',
+    'heilongjiang': '黑龙江',
+    'hunan': '湖南',
+    'jilin': '吉林',
+    'jiangsu': '江苏',
+    'jiangxi': '江西',
+    'liaoning': '辽宁',
+    'macau': '澳门',
+    'macao': '澳门',
+    'inner mongolia': '内蒙古',
+    'ningxia': '宁夏',
+    'qinghai': '青海',
+    'sichuan': '四川',
+    'shandong': '山东',
+    'shanghai': '上海',
+    'shaanxi': '陕西',
+    'shanxi': '山西',
+    'tianjin': '天津',
+    'taiwan': '台湾',
+    'xinjiang': '新疆',
+    'xizang': '西藏',
+    'tibet': '西藏',
+    'yunnan': '云南',
+    'zhejiang': '浙江',
 }
 
 
@@ -90,7 +165,30 @@ def clean_region(value):
     value = ' '.join(value.split())[:24]
     if not value or value.startswith('__'):
         return UNKNOWN_REGION
+    if value in {'中国大陆', '中國大陸'}:
+        return UNKNOWN_CHINA_REGION
     return value
+
+
+def normalize_china_region(region, region_code):
+    code = str(region_code or '').strip().upper()
+    if code.startswith('CN-'):
+        code = code[3:]
+    if code in CHINA_REGION_NAMES:
+        return CHINA_REGION_NAMES[code]
+
+    value = str(region or '').strip()
+    if not value:
+        return None
+    normalized = value.lower().replace(' province', '').replace(' municipality', '').strip()
+    if normalized in CHINA_REGION_ALIASES:
+        return CHINA_REGION_ALIASES[normalized]
+    for suffix in ('省', '市', '壮族自治区', '回族自治区', '维吾尔自治区', '自治区', '特别行政区'):
+        if value.endswith(suffix):
+            value = value[:-len(suffix)]
+    if value in set(CHINA_REGION_NAMES.values()):
+        return value
+    return None
 
 
 def clean_row(row):
@@ -234,6 +332,10 @@ def validated_entry(payload):
 
 def client_region(headers, client_address):
     country = (headers.get('CF-IPCountry') or '').strip().upper()
+    region = headers.get('CF-Region') or headers.get('CF-IPRegion') or ''
+    region_code = headers.get('CF-Region-Code') or headers.get('CF-IPRegion-Code') or ''
+    if country == 'CN':
+        return normalize_china_region(region, region_code) or UNKNOWN_CHINA_REGION
     if country and country not in {'XX', 'T1'}:
         return COUNTRY_NAMES.get(country, country)
     ip = ''
