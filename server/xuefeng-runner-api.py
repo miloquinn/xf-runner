@@ -6,6 +6,10 @@ import os
 import tempfile
 import time
 import fcntl
+import ipaddress
+import urllib.error
+import urllib.parse
+import urllib.request
 
 DATA_DIR = Path(os.environ.get('XUEFENG_RUNNER_DATA_DIR', '/var/lib/xuefeng-runner'))
 DATA_FILE = DATA_DIR / 'scores.json'
@@ -16,6 +20,9 @@ MAX_SCORE = int(os.environ.get('XUEFENG_RUNNER_MAX_SCORE', '200000'))
 MAX_NAME_LENGTH = 12
 ALLOWED_DIFFICULTIES = {'简单', '普通', '困难'}
 MAX_META_ITEMS = 300
+IP_LOOKUP_ENABLED = os.environ.get('XUEFENG_RUNNER_IP_LOOKUP', '1') != '0'
+IP_LOOKUP_TIMEOUT = float(os.environ.get('XUEFENG_RUNNER_IP_LOOKUP_TIMEOUT', '1.2'))
+IP_LOOKUP_CACHE_TTL = int(os.environ.get('XUEFENG_RUNNER_IP_LOOKUP_CACHE_TTL', '86400'))
 UNKNOWN_REGION = '未知'
 UNKNOWN_CHINA_REGION = '未知省份'
 LOCAL_REGION = '本地'
@@ -111,6 +118,7 @@ CHINA_REGION_ALIASES = {
     'yunnan': '云南',
     'zhejiang': '浙江',
 }
+IP_REGION_CACHE = {}
 
 
 def ensure_store():
@@ -188,6 +196,15 @@ def normalize_china_region(region, region_code):
             value = value[:-len(suffix)]
     if value in set(CHINA_REGION_NAMES.values()):
         return value
+    return None
+
+
+def normalize_lookup_region(country_code, region, region_code):
+    country = str(country_code or '').strip().upper()
+    if country == 'CN':
+        return normalize_china_region(region, region_code) or UNKNOWN_CHINA_REGION
+    if country:
+        return COUNTRY_NAMES.get(country, country)
     return None
 
 
@@ -330,18 +347,74 @@ def validated_entry(payload):
     }, None
 
 
+def public_ip(value):
+    try:
+        ip = ipaddress.ip_address(str(value).strip())
+    except ValueError:
+        return None
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
+        return None
+    return str(ip)
+
+
+def client_ip(headers, client_address):
+    candidates = [
+        headers.get('CF-Connecting-IP'),
+        headers.get('True-Client-IP'),
+        headers.get('X-Real-IP'),
+    ]
+    forwarded_for = headers.get('X-Forwarded-For') or ''
+    candidates.extend(part.strip() for part in forwarded_for.split(','))
+    if client_address:
+        candidates.append(str(client_address[0] or ''))
+    for candidate in candidates:
+        ip = public_ip(candidate)
+        if ip:
+            return ip
+    return ''
+
+
+def lookup_region_by_ip(ip):
+    if not IP_LOOKUP_ENABLED or not ip:
+        return None
+    now = time.time()
+    cached = IP_REGION_CACHE.get(ip)
+    if cached and cached[1] > now:
+        return cached[0]
+    url = f'https://ipapi.co/{urllib.parse.quote(ip, safe="")}/json/'
+    request = urllib.request.Request(url, headers={'User-Agent': 'xuefeng-runner/1.0'})
+    try:
+        with urllib.request.urlopen(request, timeout=IP_LOOKUP_TIMEOUT) as response:
+            if response.status != 200:
+                return None
+            payload = json.loads(response.read(4096).decode('utf-8', errors='replace'))
+    except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+    region = normalize_lookup_region(
+        payload.get('country_code') or payload.get('country'),
+        payload.get('region') or payload.get('region_name'),
+        payload.get('region_code'),
+    )
+    if region:
+        IP_REGION_CACHE[ip] = (region, now + IP_LOOKUP_CACHE_TTL)
+    return region
+
+
 def client_region(headers, client_address):
     country = (headers.get('CF-IPCountry') or '').strip().upper()
     region = headers.get('CF-Region') or headers.get('CF-IPRegion') or ''
     region_code = headers.get('CF-Region-Code') or headers.get('CF-IPRegion-Code') or ''
     if country == 'CN':
-        return normalize_china_region(region, region_code) or UNKNOWN_CHINA_REGION
+        header_region = normalize_china_region(region, region_code)
+        if header_region:
+            return header_region
+        return lookup_region_by_ip(client_ip(headers, client_address)) or UNKNOWN_CHINA_REGION
     if country and country not in {'XX', 'T1'}:
         return COUNTRY_NAMES.get(country, country)
-    ip = ''
-    if client_address:
-        ip = str(client_address[0] or '')
-    if ip.startswith('127.') or ip == '::1':
+    ip = client_ip(headers, client_address)
+    if ip:
+        return lookup_region_by_ip(ip) or UNKNOWN_REGION
+    if client_address and str(client_address[0] or '').startswith('127.'):
         return LOCAL_REGION
     return UNKNOWN_REGION
 

@@ -78,7 +78,7 @@ http://127.0.0.1:4173/
 - `GET /api/leaderboard`
 - `POST /api/score`
 
-线上后端脚本位于 `/usr/local/bin/xuefeng-runner-api.py`，仓库副本在 `server/xuefeng-runner-api.py`。后端会拒绝非法难度、空名字、`__` 开头的探测名、非整数分数和明显不可能的超高分。地区统计按服务端收到的网络地区聚合，不在 API 响应或 Git 仓库中保存明文 IP。Cloudflare 若提供省/地区请求头，中国地区会显示到省份；否则归为“未知省份”。
+线上后端脚本位于 `/usr/local/bin/xuefeng-runner-api.py`，仓库副本在 `server/xuefeng-runner-api.py`。后端会拒绝非法难度、空名字、`__` 开头的探测名、非整数分数和明显不可能的超高分。地区统计按服务端收到的网络地区聚合，不在 API 响应或 Git 仓库中保存明文 IP。后端会优先使用 Cloudflare 省/地区请求头；缺失时读取 `CF-Connecting-IP` / `X-Forwarded-For` 中的真实公网 IP，并通过 `ipapi.co` 查询省/地区，带超时和内存缓存。
 
 `GET /api/leaderboard` 返回示例：
 
